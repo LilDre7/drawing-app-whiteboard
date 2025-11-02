@@ -11,7 +11,7 @@ Perfecta para **notas rápidas, sesiones colaborativas o prácticas de dibujo di
 * 🎨 Selector de color y grosor del trazo
 * 🧽 Herramienta de borrado
 * 💾 Opción para limpiar el lienzo o guardar el dibujo como imagen
-* ⚡ Interfaz fluida y responsiva con **CSS puro**
+* ⚡ Interfaz fluida y responsiva
 * 🔧 Código modular y tipado con **TypeScript**
 
 ---
@@ -82,7 +82,7 @@ DRAWING-APP-WHITEBOARD/
 
 * 👥 Uso gratis
 * 📱 Optimización completa para dispositivos móviles
-* 🖼️ Descarga de imaagen 
+* 🖼️ Descarga de imagen
 * 🌙 Tema claro
   
 ---
