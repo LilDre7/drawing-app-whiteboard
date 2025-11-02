@@ -89,8 +89,8 @@ DRAWING-APP-WHITEBOARD/
 
 ## 🧑‍💻 Autor
 
-Desarrollado por **[Alvaro AburtO Ocampo]**
-📫 Contacto: [alvaroaburto71@gmail.com]
-🌐 Portafolio: [https://alvaro-aburto.vercel.app/](https://alvaro-aburto.vercel.app/)
+* Desarrollado por **[Alvaro Aburto Ocampo]** 
+* 📫 Contacto: [alvaroaburto71@gmail.com]
+* 🌐 Portafolio: [https://alvaro-aburto.vercel.app/](https://alvaro-aburto.vercel.app/)
 
 ---
