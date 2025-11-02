@@ -24,23 +24,9 @@ import {
   ImageIcon,
   Check,
   Trash2,
-  Menu,
-  Github,
-  Keyboard,
-  Lightbulb,
-  Info,
-  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import MenuComponent from "@/components/menu";
 
 type Tool =
@@ -143,6 +129,7 @@ export default function DrawingCanvas() {
     redrawCanvas();
   }, [shapes, selectedShapeId, zoom, panOffset, draggedShape]);
 
+  // Calculate the bounds of the shape
   const calculateBounds = (shape: Shape) => {
     if (shape.points.length === 0) return null;
 
@@ -211,6 +198,7 @@ export default function DrawingCanvas() {
     };
   };
 
+  // Check if the point is inside the shape
   const isPointInShape = (point: Point, shape: Shape): boolean => {
     const bounds = shape.bounds || calculateBounds(shape);
     if (!bounds) return false;
@@ -224,6 +212,7 @@ export default function DrawingCanvas() {
     );
   };
 
+  // Get the resize handle of the shape
   const getResizeHandle = (point: Point, shape: Shape): ResizeHandle => {
     if (shape.type !== "image" || !shape.bounds) return null;
 
@@ -259,6 +248,7 @@ export default function DrawingCanvas() {
     return null;
   };
 
+  // Redraw the canvas
   const redrawCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -291,6 +281,7 @@ export default function DrawingCanvas() {
     }
   };
 
+  // Draw the shape on the canvas
   const drawShape = (
     ctx: CanvasRenderingContext2D,
     shape: Shape,
@@ -937,7 +928,7 @@ export default function DrawingCanvas() {
           <canvas
             ref={canvasRef}
             className={cn(
-              "h-full w-full",
+              "h-full w-full touch-none",
               tool === "hand"
                 ? isPanning
                   ? "cursor-grabbing"
@@ -950,6 +941,29 @@ export default function DrawingCanvas() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            // 👇 agrega estos para móvil
+            onTouchStart={(e) => {
+              e.preventDefault();
+              const touch = e.touches[0];
+              handleMouseDown({
+                ...e,
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+              } as unknown as React.MouseEvent<HTMLCanvasElement>);
+            }}
+            onTouchMove={(e) => {
+              e.preventDefault();
+              const touch = e.touches[0];
+              handleMouseMove({
+                ...e,
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+              } as unknown as React.MouseEvent<HTMLCanvasElement>);
+            }}
+            onTouchEnd={(e) => {
+              e.preventDefault();
+              handleMouseUp();
+            }}
           />
 
           <input
@@ -1232,10 +1246,21 @@ export default function DrawingCanvas() {
             >
               <Trash2 className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg sm:h-10 sm:w-10" onClick={saveAsImage} title="Exportar">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg sm:h-10 sm:w-10"
+              onClick={saveAsImage}
+              title="Exportar"
+            >
               <Download className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg sm:h-10 sm:w-10" title="Más opciones">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 rounded-lg sm:h-10 sm:w-10"
+              title="Más opciones"
+            >
               <MoreHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </div>
@@ -1299,13 +1324,25 @@ export default function DrawingCanvas() {
 
         {/* Zoom controls - Bottom on all screens */}
         <div className="absolute bottom-4 right-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
-          <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomOut} title="Zoom out">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 sm:h-8 sm:w-8"
+            onClick={handleZoomOut}
+            title="Zoom out"
+          >
             <ZoomOut className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </Button>
           <div className="mx-0.5 min-w-[45px] text-center text-xs font-medium sm:mx-1 sm:min-w-[50px] sm:text-sm">
             {zoom}%
           </div>
-          <Button variant="ghost" size="icon" className="h-7 w-7 sm:h-8 sm:w-8" onClick={handleZoomIn} title="Zoom in">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 sm:h-8 sm:w-8"
+            onClick={handleZoomIn}
+            title="Zoom in"
+          >
             <ZoomIn className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           </Button>
         </div>
