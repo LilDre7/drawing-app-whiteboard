@@ -57,18 +57,23 @@ Perfecta para **notas rápidas, sesiones colaborativas o prácticas de dibujo di
 ## 📂 Estructura del proyecto
 
 ```
-drawing-app-whiteboard/
-├── src/
-│   ├── components/
-│   │   └── Canvas.ts
-│   ├── styles/
-│   │   └── main.css
-│   ├── main.ts
-│   └── utils/
-│       └── drawingHelpers.ts
-├── index.html
-├── package.json
-└── README.md
+DRAWING-APP-WHITEBOARD/
+├── app/
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+│
+├── components/
+│   ├── ui/
+│   ├── drawing-canvas.tsx
+│   └── theme-provider.tsx
+│
+├── lib/
+│   └── utils.ts
+│
+├── public/
+├── styles/
+│   └── globals.css
 ```
 
 ---
@@ -89,5 +94,3 @@ Desarrollado por **[Alvaro AburtO Ocampo]**
 🌐 Portafolio: [https://alvaro-aburto.vercel.app/](https://alvaro-aburto.vercel.app/)
 
 ---
-
-¿Quieres que te lo prepare también en **formato Markdown (.md)** listo para descarga (por ejemplo, `README.md`)? Puedo generarte el archivo directamente.
