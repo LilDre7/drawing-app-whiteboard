@@ -7,9 +7,12 @@ const _geist = Geist({ subsets: ["latin"] });
 const _geistMono = Geist_Mono({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: 'v0 App',
-  description: 'Created with v0',
+  title: 'Just drawOk',
+  description: 'Is a simple drawing app',
   generator: 'v0.app',
+  icons: {
+    icon: '/draw.png',
+  },
 }
 
 export default function RootLayout({
