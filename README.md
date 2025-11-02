@@ -75,18 +75,11 @@ drawing-app-whiteboard/
 
 ## 🎯 Futuras mejoras
 
-* 👥 Modo colaborativo en tiempo real (WebSocket / WebRTC)
+* 👥 Uso gratis
 * 📱 Optimización completa para dispositivos móviles
-* 🖼️ Soporte para capas y herramientas avanzadas
-* 🌙 Tema oscuro / claro
-
----
-
-## 📸 Vista previa
-
-*(Agrega aquí una imagen o GIF de la app en acción)*
-`![Drawing App Preview](./preview.gif)`
-
+* 🖼️ Descarga de imaagen 
+* 🌙 Tema claro
+  
 ---
 
 ## 🧑‍💻 Autor
