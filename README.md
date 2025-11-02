@@ -91,8 +91,8 @@ drawing-app-whiteboard/
 
 ## 🧑‍💻 Autor
 
-Desarrollado por **[Tu Nombre]**
-📫 Contacto: [[alvaroaburto71@gmail.com]
+Desarrollado por **[Alvaro AburtO Ocampo]**
+📫 Contacto: [alvaroaburto71@gmail.com]
 🌐 Portafolio: [https://alvaro-aburto.vercel.app/](https://alvaro-aburto.vercel.app/)
 
 ---
