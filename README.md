@@ -1,30 +1,100 @@
-# Drawing app whiteboard
+# 🖌️ Drawing App Whiteboard
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Una **aplicación interactiva de dibujo tipo pizarra digital**, desarrollada en **TypeScript**, que permite crear bocetos, diagramas y anotaciones de forma libre desde el navegador.
+Perfecta para **notas rápidas, sesiones colaborativas o prácticas de dibujo digital**.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/alvaroaburto71-gmailcoms-projects/v0-drawing-app-whiteboard)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/vxUbPCHrk8q)
+---
 
-## Overview
+## 🚀 Características principales
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+* ✏️ Dibujo libre con soporte para mouse o pantallas táctiles
+* 🎨 Selector de color y grosor del trazo
+* 🧽 Herramienta de borrado
+* 💾 Opción para limpiar el lienzo o guardar el dibujo como imagen
+* ⚡ Interfaz fluida y responsiva con **CSS puro**
+* 🔧 Código modular y tipado con **TypeScript**
 
-## Deployment
+---
 
-Your project is live at:
+## 🧠 Tecnologías utilizadas
 
-**[https://vercel.com/alvaroaburto71-gmailcoms-projects/v0-drawing-app-whiteboard](https://vercel.com/alvaroaburto71-gmailcoms-projects/v0-drawing-app-whiteboard)**
+| Tecnología     | Uso principal                                          | Porcentaje |
+| -------------- | ------------------------------------------------------ | ---------- |
+| **TypeScript** | Lógica de la aplicación y manejo de eventos del lienzo | 84.3%      |
+| **CSS**        | Estilos y diseño responsivo del whiteboard             | 15.1%      |
+| **JavaScript** | Funcionalidades ligeras complementarias                | 0.6%       |
 
-## Build your app
+---
 
-Continue building your app on:
+## 🛠️ Instalación y ejecución
 
-**[https://v0.app/chat/vxUbPCHrk8q](https://v0.app/chat/vxUbPCHrk8q)**
+1. **Clona este repositorio**
 
-## How It Works
+   ```bash
+   https://github.com/LilDre7/drawing-app-whiteboard.git
+   ```
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+2. **Instala las dependencias**
+
+   ```bash
+   npm install
+   ```
+
+3. **Ejecuta el proyecto en modo desarrollo**
+
+   ```bash
+   pnpm next
+   ```
+
+4. **Abre tu navegador**
+
+   ```
+   http://localhost:3000
+   ```
+
+---
+
+## 📂 Estructura del proyecto
+
+```
+drawing-app-whiteboard/
+├── src/
+│   ├── components/
+│   │   └── Canvas.ts
+│   ├── styles/
+│   │   └── main.css
+│   ├── main.ts
+│   └── utils/
+│       └── drawingHelpers.ts
+├── index.html
+├── package.json
+└── README.md
+```
+
+---
+
+## 🎯 Futuras mejoras
+
+* 👥 Modo colaborativo en tiempo real (WebSocket / WebRTC)
+* 📱 Optimización completa para dispositivos móviles
+* 🖼️ Soporte para capas y herramientas avanzadas
+* 🌙 Tema oscuro / claro
+
+---
+
+## 📸 Vista previa
+
+*(Agrega aquí una imagen o GIF de la app en acción)*
+`![Drawing App Preview](./preview.gif)`
+
+---
+
+## 🧑‍💻 Autor
+
+Desarrollado por **[Tu Nombre]**
+📫 Contacto: [[alvaroaburto71@gmail.com]
+🌐 Portafolio: [https://alvaro-aburto.vercel.app/](https://alvaro-aburto.vercel.app/)
+
+---
+
+¿Quieres que te lo prepare también en **formato Markdown (.md)** listo para descarga (por ejemplo, `README.md`)? Puedo generarte el archivo directamente.
