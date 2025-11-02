@@ -686,6 +686,8 @@ export default function DrawingCanvas() {
         // Store the image element before creating the shape
         imageElementsRef.current.set(shapeId, img)
 
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const newShape: Shape = {
           id: shapeId,
           type: "image",
