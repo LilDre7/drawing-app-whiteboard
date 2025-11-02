@@ -118,6 +118,7 @@ export default function DrawingCanvas() {
   useEffect(() => {
     redrawCanvas()
   }, [shapes, selectedShapeId, zoom, panOffset, draggedShape])
+  
 
   const calculateBounds = (shape: Shape) => {
     if (shape.points.length === 0) return null
@@ -474,7 +475,7 @@ export default function DrawingCanvas() {
             imageWidth: newWidth,
             imageHeight: newHeight,
           }
-          updatedShape.bounds = calculateBounds(updatedShape)
+          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"]
           setDraggedShape(updatedShape)
         }
       }
@@ -506,7 +507,7 @@ export default function DrawingCanvas() {
           imageWidth: shape.imageWidth,
           imageHeight: shape.imageHeight,
         }
-        updatedShape.bounds = calculateBounds(updatedShape)
+        updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"]
         setDraggedShape(updatedShape)
       }
       return
@@ -562,7 +563,7 @@ export default function DrawingCanvas() {
         bounds: calculateBounds(currentShape),
       }
       saveToHistory()
-      setShapes([...shapes, shapeWithBounds])
+      setShapes([...shapes, shapeWithBounds as Shape])
       setCurrentShape(null)
     }
     setIsDrawing(false)
@@ -651,6 +652,10 @@ export default function DrawingCanvas() {
 
     const reader = new FileReader()
     reader.onload = (event) => {
+      if (!event.target?.result) return
+      
+      const imageDataUrl = event.target.result as string
+
       const img = new Image()
       img.onload = () => {
         const canvas = canvasRef.current
@@ -667,11 +672,18 @@ export default function DrawingCanvas() {
           height = height * ratio
         }
 
-        const centerX = canvas.width / 2 - width / 2
-        const centerY = canvas.height / 2 - height / 2
+        // Calculate position in world coordinates (considering zoom and pan)
+        // The canvas origin is at (canvas.width/2, canvas.height/2) in world space
+        const offsetX = canvas.width / 2
+        const offsetY = canvas.height / 2
+        
+        // Position at the center of the visible viewport
+        const centerX = offsetX - width / 2
+        const centerY = offsetY - height / 2
 
         const shapeId = Date.now().toString()
 
+        // Store the image element before creating the shape
         imageElementsRef.current.set(shapeId, img)
 
         const newShape: Shape = {
@@ -680,7 +692,7 @@ export default function DrawingCanvas() {
           points: [{ x: centerX, y: centerY }],
           color,
           strokeWidth,
-          imageData: event.target?.result as string,
+          imageData: imageDataUrl,
           imageWidth: width,
           imageHeight: height,
           bounds: {
@@ -692,11 +704,22 @@ export default function DrawingCanvas() {
         }
 
         saveToHistory()
-        setShapes([...shapes, newShape])
+        setShapes((prevShapes) => [...prevShapes, newShape])
         setTool("select")
-        setTimeout(() => redrawCanvas(), 0)
+        
+        // Force a redraw after state update
+        requestAnimationFrame(() => {
+          redrawCanvas()
+        })
       }
-      img.src = event.target?.result as string
+      img.onerror = () => {
+        console.error("Error loading image")
+        alert("Error al cargar la imagen. Por favor, intenta con otra imagen.")
+      }
+      img.src = imageDataUrl
+    }
+    reader.onerror = () => {
+      console.error("Error reading file")
     }
     reader.readAsDataURL(file)
 
