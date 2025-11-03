@@ -29,6 +29,52 @@ import { cn } from "@/lib/utils";
 
 import MenuComponent from "@/components/menu";
 
+// Helper hook to position and show/hide the textarea editor like Excalidraw
+function useTextEditor(params: {
+  screenPosition: { x: number; y: number };
+  fontSize: number;
+  color: string;
+  viewport: { width: number; height: number };
+  active: boolean;
+}) {
+  const { screenPosition, fontSize, color, viewport, active } = params;
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const minWidth = 120;
+  const minHeight = fontSize + 8;
+
+  // Desired absolute position over the canvas (baseline -> top conversion)
+  const left = Math.max(0, screenPosition.x);
+  const top = Math.max(0, screenPosition.y - fontSize);
+
+  // Hide if any edge would overflow the viewport (behavior requested)
+  const hidden =
+    !active ||
+    left < 0 ||
+    top < 0 ||
+    left + minWidth > (viewport.width || 0) ||
+    top + minHeight > (viewport.height || 0);
+
+  const style: React.CSSProperties = {
+    position: "absolute",
+    left: `${left}px`,
+    top: `${top}px`,
+    fontSize: `${fontSize}px`,
+    color,
+    minWidth: `${minWidth}px`,
+    minHeight: `${minHeight}px`,
+    maxWidth: "90%",
+    maxHeight: `${Math.max(50, (viewport.height || 0) - 16)}px`,
+    overflow: "auto",
+    lineHeight: 1.2,
+    whiteSpace: "pre-wrap",
+    wordBreak: "break-word",
+    display: hidden ? "none" : undefined,
+  };
+
+  return { ref, style, hidden } as const;
+}
+
 type Tool =
   | "select"
   | "pencil"
@@ -67,9 +113,20 @@ type ResizeHandle = "nw" | "ne" | "sw" | "se" | null;
 
 export default function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const textInputRef = useRef<HTMLInputElement>(null);
+  const previewCanvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Text editor overlay state and ref are managed via useTextEditor
+  const [isEditingText, setIsEditingText] = useState(false);
+  const [textPosition, setTextPosition] = useState<Point>({ x: 0, y: 0 });
+  const [textValue, setTextValue] = useState("");
+  const [screenTextPosition, setScreenTextPosition] = useState<Point>({ x: 0, y: 0 });
   const imageInputRef = useRef<HTMLInputElement>(null);
   const imageElementsRef = useRef<Map<string, HTMLImageElement>>(new Map());
+  const devicePixelRatioRef = useRef<number>(1);
+  const viewportSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+  const rafIdRef = useRef<number | null>(null);
+  const previewRafIdRef = useRef<number | null>(null);
+  const [roughness, setRoughness] = useState(0.2);
 
   const [tool, setTool] = useState<Tool>("select");
   const [isDrawing, setIsDrawing] = useState(false);
@@ -88,9 +145,53 @@ export default function DrawingCanvas() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
 
-  const [isEditingText, setIsEditingText] = useState(false);
-  const [textPosition, setTextPosition] = useState<Point>({ x: 0, y: 0 });
-  const [textValue, setTextValue] = useState("");
+  
+  
+  // Calculate screen position from canvas coordinates (relative to canvas container)
+  const getScreenPosition = (canvasPoint: Point): Point => {
+    const canvas = canvasRef.current;
+    if (!canvas) return { x: 0, y: 0 };
+    
+    const scale = zoom / 100;
+    const offsetX = canvas.width / 2;
+    const offsetY = canvas.height / 2;
+    
+    // Convert canvas world coordinates to screen coordinates
+    const screenX = (canvasPoint.x - offsetX) * scale + offsetX + panOffset.x;
+    const screenY = (canvasPoint.y - offsetY) * scale + offsetY + panOffset.y;
+    
+    return { x: screenX, y: screenY };
+  };
+  
+  // Get minimum font size for mobile readability
+  const getFontSize = (baseSize: number): number => {
+    if (typeof window === 'undefined') return baseSize;
+    const isMobile = window.innerWidth < 768;
+    const minSize = isMobile ? 16 : baseSize;
+    return Math.max(minSize, baseSize);
+  };
+  
+  const textEditor = useTextEditor({
+    screenPosition: screenTextPosition,
+    fontSize: getFontSize(strokeWidth * 8),
+    color,
+    viewport: viewportSizeRef.current,
+    active: isEditingText,
+  });
+  
+  // Update screen position when text position, zoom, or pan changes
+  useEffect(() => {
+    if (isEditingText && canvasRef.current) {
+      const scale = zoom / 100;
+      const offsetX = viewportSizeRef.current.width / 2;
+      const offsetY = viewportSizeRef.current.height / 2;
+      
+      const screenX = (textPosition.x - offsetX) * scale + offsetX + panOffset.x;
+      const screenY = (textPosition.y - offsetY) * scale + offsetY + panOffset.y;
+      
+      setScreenTextPosition({ x: screenX, y: screenY });
+    }
+  }, [isEditingText, textPosition, zoom, panOffset]);
 
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -109,24 +210,67 @@ export default function DrawingCanvas() {
     height: number;
   }>({ width: 0, height: 0 });
 
+  // request a render on next animation frame
+  const requestRender = () => {
+    if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+    rafIdRef.current = requestAnimationFrame(() => {
+      rafIdRef.current = null;
+      redrawCanvas();
+    });
+  };
+
+  const requestPreviewRender = () => {
+    if (previewRafIdRef.current != null) cancelAnimationFrame(previewRafIdRef.current);
+    previewRafIdRef.current = requestAnimationFrame(() => {
+      previewRafIdRef.current = null;
+      redrawPreview();
+    });
+  };
+
+  // Handle responsive canvas sizing with devicePixelRatio
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
+    const preview = previewCanvasRef.current;
+    const container = containerRef.current;
+    if (!canvas || !preview || !container) return;
 
-    const resizeCanvas = () => {
-      const rect = canvas.getBoundingClientRect();
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      redrawCanvas();
+    const applySize = () => {
+      const rect = container.getBoundingClientRect();
+      viewportSizeRef.current = { width: rect.width, height: rect.height };
+      const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
+      devicePixelRatioRef.current = dpr;
+      const targetWidth = Math.max(1, Math.round(rect.width * dpr));
+      const targetHeight = Math.max(1, Math.round(rect.height * dpr));
+      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+      }
+      if (preview.width !== targetWidth || preview.height !== targetHeight) {
+        preview.width = targetWidth;
+        preview.height = targetHeight;
+      }
+      requestRender();
+      requestPreviewRender();
     };
 
-    resizeCanvas();
-    window.addEventListener("resize", resizeCanvas);
-    return () => window.removeEventListener("resize", resizeCanvas);
+    applySize();
+
+    const ro = new ResizeObserver(() => applySize());
+    ro.observe(container);
+
+    const onWindowResize = () => applySize();
+    window.addEventListener("resize", onWindowResize);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", onWindowResize);
+      if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
+      if (previewRafIdRef.current != null) cancelAnimationFrame(previewRafIdRef.current);
+    };
   }, []);
 
   useEffect(() => {
-    redrawCanvas();
+    requestRender();
   }, [shapes, selectedShapeId, zoom, panOffset, draggedShape]);
 
   // Calculate the bounds of the shape
@@ -138,11 +282,11 @@ export default function DrawingCanvas() {
       if (canvas) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.font = `${
-            shape.strokeWidth * 8
-          }px 'Comic Sans MS', cursive, sans-serif`;
+          const baseFontSize = shape.strokeWidth * 8;
+          const fontSize = getFontSize(baseFontSize);
+          ctx.font = `${fontSize}px 'Comic Sans MS', cursive, sans-serif`;
           const metrics = ctx.measureText(shape.text);
-          const textHeight = shape.strokeWidth * 8;
+          const textHeight = fontSize;
           return {
             minX: shape.points[0].x,
             minY: shape.points[0].y - textHeight,
@@ -248,7 +392,7 @@ export default function DrawingCanvas() {
     return null;
   };
 
-  // Redraw the canvas
+  // Redraw the canvas (base layer only, committed shapes)
   const redrawCanvas = () => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -256,12 +400,16 @@ export default function DrawingCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    const dpr = devicePixelRatioRef.current;
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+    // Work in CSS pixel space by scaling first by DPR
+    ctx.scale(dpr, dpr);
+
     const scale = zoom / 100;
-    const offsetX = canvas.width / 2;
-    const offsetY = canvas.height / 2;
+    const offsetX = viewportSizeRef.current.width / 2;
+    const offsetY = viewportSizeRef.current.height / 2;
 
     ctx.translate(offsetX + panOffset.x, offsetY + panOffset.y);
     ctx.scale(scale, scale);
@@ -276,8 +424,32 @@ export default function DrawingCanvas() {
       drawShape(ctx, draggedShape, true);
     }
 
-    if (currentShape) {
+    // Do NOT draw current pencil stroke here; preview canvas handles it
+    if (currentShape && currentShape.type !== "pencil") {
       drawShape(ctx, currentShape, false);
+    }
+  };
+
+  // Redraw only the preview (transient) content
+  const redrawPreview = () => {
+    const canvas = previewCanvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = devicePixelRatioRef.current;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.scale(dpr, dpr);
+
+    const scale = zoom / 100;
+    const offsetX = viewportSizeRef.current.width / 2;
+    const offsetY = viewportSizeRef.current.height / 2;
+    ctx.translate(offsetX + panOffset.x, offsetY + panOffset.y);
+    ctx.scale(scale, scale);
+    ctx.translate(-offsetX, -offsetY);
+
+    if (currentShape && currentShape.type === "pencil") {
+      drawPencilStylized(ctx, currentShape.points, currentShape.color, currentShape.strokeWidth,  Math.max(0, Math.min(1, roughness)));
     }
   };
 
@@ -293,13 +465,7 @@ export default function DrawingCanvas() {
     ctx.lineJoin = "round";
 
     if (shape.type === "pencil") {
-      if (shape.points.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(shape.points[0].x, shape.points[0].y);
-      shape.points.forEach((point) => {
-        ctx.lineTo(point.x, point.y);
-      });
-      ctx.stroke();
+      drawPencilStylized(ctx, shape.points, shape.color, shape.strokeWidth, Math.max(0, Math.min(1, roughness)));
     } else if (shape.type === "line") {
       if (shape.points.length < 2) return;
       ctx.beginPath();
@@ -325,9 +491,9 @@ export default function DrawingCanvas() {
       ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
       ctx.stroke();
     } else if (shape.type === "text" && shape.text) {
-      ctx.font = `${
-        shape.strokeWidth * 8
-      }px 'Comic Sans MS', cursive, sans-serif`;
+      const baseFontSize = shape.strokeWidth * 8;
+      const fontSize = getFontSize(baseFontSize);
+      ctx.font = `${fontSize}px 'Comic Sans MS', cursive, sans-serif`;
       ctx.fillStyle = shape.color;
       ctx.fillText(shape.text, shape.points[0].x, shape.points[0].y);
     } else if (
@@ -361,7 +527,7 @@ export default function DrawingCanvas() {
       ctx.setLineDash([]);
 
       if (shape.type === "image") {
-        const handleSize = 8;
+        const handleSize = 12;
         ctx.fillStyle = "#3b82f6";
 
         // Draw corner handles
@@ -393,13 +559,66 @@ export default function DrawingCanvas() {
     }
   };
 
+  // Stylized pencil: smoothing + jitter/roughness
+  const drawPencilStylized = (
+    ctx: CanvasRenderingContext2D,
+    points: Point[],
+    color: string,
+    width: number,
+    rough: number
+  ) => {
+    if (points.length < 2) return;
+    const smoothed = smoothPoints(points);
+    const jittered = applyJitter(smoothed, Math.max(0, Math.min(1, rough)) * Math.max(0.2, width * 0.2));
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(jittered[0].x, jittered[0].y);
+    for (let i = 1; i < jittered.length - 1; i++) {
+      const midX = (jittered[i].x + jittered[i + 1].x) / 2;
+      const midY = (jittered[i].y + jittered[i + 1].y) / 2;
+      ctx.quadraticCurveTo(jittered[i].x, jittered[i].y, midX, midY);
+    }
+    ctx.lineTo(jittered[jittered.length - 1].x, jittered[jittered.length - 1].y);
+    ctx.stroke();
+  };
+
+  // Simple moving-average smoothing for points
+  const smoothPoints = (pts: Point[], windowSize = 3): Point[] => {
+    if (pts.length <= 2) return pts.slice();
+    const half = Math.floor(windowSize / 2);
+    const out: Point[] = [];
+    for (let i = 0; i < pts.length; i++) {
+      let sumX = 0, sumY = 0, count = 0;
+      for (let j = -half; j <= half; j++) {
+        const idx = Math.min(pts.length - 1, Math.max(0, i + j));
+        sumX += pts[idx].x;
+        sumY += pts[idx].y;
+        count++;
+      }
+      out.push({ x: sumX / count, y: sumY / count });
+    }
+    return out;
+  };
+
+  // Apply jitter based on roughness factor
+  const applyJitter = (pts: Point[], amount: number): Point[] => {
+    if (amount <= 0) return pts.slice();
+    return pts.map((p) => ({
+      x: p.x + (Math.random() - 0.5) * amount,
+      y: p.y + (Math.random() - 0.5) * amount,
+    }));
+  };
+
   const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
     const scale = zoom / 100;
-    const offsetX = canvas.width / 2;
-    const offsetY = canvas.height / 2;
+    const offsetX = rect.width / 2;
+    const offsetY = rect.height / 2;
 
     const rawX = e.clientX - rect.left;
     const rawY = e.clientY - rect.top;
@@ -417,12 +636,25 @@ export default function DrawingCanvas() {
     setHistoryIndex(newHistory.length - 1);
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    const point = getMousePos(e);
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    // Get coordinates from mouse or touch event
+    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
+    
+    if (clientX === undefined || clientY === undefined) return;
+    
+    // Create a synthetic mouse event for getMousePos
+    const syntheticEvent = {
+      ...e,
+      clientX,
+      clientY,
+    } as React.MouseEvent<HTMLCanvasElement>;
+    
+    const point = getMousePos(syntheticEvent);
 
     if (tool === "hand") {
       setIsPanning(true);
-      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+      setPanStart({ x: clientX - panOffset.x, y: clientY - panOffset.y });
       return;
     }
 
@@ -458,15 +690,63 @@ export default function DrawingCanvas() {
       return;
     }
 
-    setIsDrawing(true);
-
     if (tool === "text") {
+      // Prevent default to avoid any interference
+      e.preventDefault();
       setIsEditingText(true);
       setTextPosition(point);
       setTextValue("");
-      setTimeout(() => textInputRef.current?.focus(), 0);
+      // Calculate screen position directly from event for accurate placement
+      const canvas = canvasRef.current;
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect();
+        // Get screen coordinates directly from mouse/touch event
+        // These are relative to the canvas container
+        const screenX = clientX - rect.left;
+        const screenY = clientY - rect.top;
+        setScreenTextPosition({ x: screenX, y: screenY });
+        
+        // Focus the input after state updates
+        // Use a longer timeout for mobile devices
+        const isTouchEvent = 'touches' in e;
+        requestAnimationFrame(() => {
+          setTimeout(() => {
+            if (textEditor.ref.current) {
+              // For mobile, try to scroll into view but don't force it
+              if (isTouchEvent) {
+                try {
+                  textEditor.ref.current.scrollIntoView({ 
+                    behavior: 'smooth', 
+                    block: 'center',
+                    inline: 'nearest'
+                  });
+                } catch (e) {
+                  // Ignore scroll errors on mobile
+                }
+              }
+              
+              // Focus the input
+              textEditor.ref.current.focus();
+              
+              // On mobile, just position cursor at start
+              if (isTouchEvent && textEditor.ref.current.setSelectionRange) {
+                setTimeout(() => {
+                  if (textEditor.ref.current) {
+                    textEditor.ref.current.setSelectionRange(0, 0);
+                  }
+                }, 50);
+              } else if (!isTouchEvent) {
+                // On desktop, select all text
+                textEditor.ref.current.select();
+              }
+            }
+          }, isTouchEvent ? 150 : 50);
+        });
+      }
       return;
     }
+
+    setIsDrawing(true);
 
     if (tool === "eraser") {
       setIsErasing(true);
@@ -595,14 +875,14 @@ export default function DrawingCanvas() {
         ...currentShape,
         points: [...currentShape.points, point],
       });
+      requestPreviewRender();
     } else {
       setCurrentShape({
         ...currentShape,
         points: [currentShape.points[0], point],
       });
+      requestRender();
     }
-
-    redrawCanvas();
   };
 
   const handleMouseUp = () => {
@@ -644,11 +924,15 @@ export default function DrawingCanvas() {
       saveToHistory();
       setShapes([...shapes, shapeWithBounds as Shape]);
       setCurrentShape(null);
+      // clear preview layer after committing
+      requestPreviewRender();
+      requestRender();
     }
     setIsDrawing(false);
     setIsDragging(false);
   };
 
+  
   const handleTextComplete = () => {
     if (textValue.trim()) {
       const canvas = canvasRef.current;
@@ -662,11 +946,11 @@ export default function DrawingCanvas() {
       if (canvas) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.font = `${
-            strokeWidth * 8
-          }px 'Comic Sans MS', cursive, sans-serif`;
+          const baseFontSize = strokeWidth * 8;
+          const fontSize = getFontSize(baseFontSize);
+          ctx.font = `${fontSize}px 'Comic Sans MS', cursive, sans-serif`;
           const metrics = ctx.measureText(textValue);
-          const textHeight = strokeWidth * 8;
+          const textHeight = fontSize;
           bounds = {
             minX: textPosition.x,
             minY: textPosition.y - textHeight,
@@ -754,9 +1038,9 @@ export default function DrawingCanvas() {
         }
 
         // Calculate position in world coordinates (considering zoom and pan)
-        // The canvas origin is at (canvas.width/2, canvas.height/2) in world space
-        const offsetX = canvas.width / 2;
-        const offsetY = canvas.height / 2;
+        // The canvas origin is at (viewportWidth/2, viewportHeight/2) in world space
+        const offsetX = viewportSizeRef.current.width / 2;
+        const offsetY = viewportSizeRef.current.height / 2;
 
         // Position at the center of the visible viewport
         const centerX = offsetX - width / 2;
@@ -924,7 +1208,8 @@ export default function DrawingCanvas() {
       </header>
 
       <div className="relative flex-1 overflow-hidden">
-        <div className="canvas-dots absolute inset-0 bg-[oklch(0.98_0_0)] dark:bg-[oklch(0.14_0_0)]">
+        <div ref={containerRef} className="canvas-dots absolute inset-0 bg-[oklch(0.98_0_0)] dark:bg-[oklch(0.14_0_0)]">
+          {/* Base canvas (committed drawings) */}
           <canvas
             ref={canvasRef}
             className={cn(
@@ -944,12 +1229,7 @@ export default function DrawingCanvas() {
             // 👇 agrega estos para móvil
             onTouchStart={(e) => {
               e.preventDefault();
-              const touch = e.touches[0];
-              handleMouseDown({
-                ...e,
-                clientX: touch.clientX,
-                clientY: touch.clientY,
-              } as unknown as React.MouseEvent<HTMLCanvasElement>);
+              handleMouseDown(e);
             }}
             onTouchMove={(e) => {
               e.preventDefault();
@@ -966,6 +1246,12 @@ export default function DrawingCanvas() {
             }}
           />
 
+          {/* Preview canvas (current transient stroke) */}
+          <canvas
+            ref={previewCanvasRef}
+            className="pointer-events-none absolute inset-0 h-full w-full"
+          />
+
           <input
             ref={imageInputRef}
             type="file"
@@ -975,27 +1261,37 @@ export default function DrawingCanvas() {
           />
 
           {isEditingText && (
-            <input
-              ref={textInputRef}
-              type="text"
+            <textarea
+              ref={textEditor.ref}
               value={textValue}
-              onChange={(e) => setTextValue(e.target.value)}
+              onChange={(e) => {
+                setTextValue(e.target.value);
+                requestAnimationFrame(() => {
+                  if (textEditor.ref.current) {
+                    textEditor.ref.current.style.height = 'auto';
+                    textEditor.ref.current.style.height = `${textEditor.ref.current.scrollHeight}px`;
+                  }
+                });
+              }}
               onBlur={handleTextComplete}
               onKeyDown={(e) => {
-                if (e.key === "Enter") handleTextComplete();
-                if (e.key === "Escape") {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleTextComplete();
+                }
+                if (e.key === 'Escape') {
                   setIsEditingText(false);
-                  setTextValue("");
+                  setTextValue('');
                 }
               }}
-              className="absolute border-2 border-blue-500 bg-white px-2 py-1 text-base outline-none dark:bg-card"
-              style={{
-                left: textPosition.x,
-                top: textPosition.y - strokeWidth * 8,
-                fontSize: `${strokeWidth * 8}px`,
-                color: color,
-              }}
-              placeholder="Type text..."
+              className="absolute border-2 border-blue-500 bg-white px-2 py-1 text-base outline-none dark:bg-card z-[100] resize-none"
+              style={textEditor.style}
+              placeholder="Escribe texto... (Enter = terminar, Shift+Enter = salto)"
+              autoFocus
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck="false"
             />
           )}
         </div>
