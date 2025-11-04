@@ -119,11 +119,17 @@ export default function DrawingCanvas() {
   const [isEditingText, setIsEditingText] = useState(false);
   const [textPosition, setTextPosition] = useState<Point>({ x: 0, y: 0 });
   const [textValue, setTextValue] = useState("");
-  const [screenTextPosition, setScreenTextPosition] = useState<Point>({ x: 0, y: 0 });
+  const [screenTextPosition, setScreenTextPosition] = useState<Point>({
+    x: 0,
+    y: 0,
+  });
   const imageInputRef = useRef<HTMLInputElement>(null);
   const imageElementsRef = useRef<Map<string, HTMLImageElement>>(new Map());
   const devicePixelRatioRef = useRef<number>(1);
-  const viewportSizeRef = useRef<{ width: number; height: number }>({ width: 0, height: 0 });
+  const viewportSizeRef = useRef<{ width: number; height: number }>({
+    width: 0,
+    height: 0,
+  });
   const rafIdRef = useRef<number | null>(null);
   const previewRafIdRef = useRef<number | null>(null);
   const [roughness, setRoughness] = useState(0.2);
@@ -145,32 +151,30 @@ export default function DrawingCanvas() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
 
-  
-  
   // Calculate screen position from canvas coordinates (relative to canvas container)
   const getScreenPosition = (canvasPoint: Point): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
-    
+
     const scale = zoom / 100;
     const offsetX = canvas.width / 2;
     const offsetY = canvas.height / 2;
-    
+
     // Convert canvas world coordinates to screen coordinates
     const screenX = (canvasPoint.x - offsetX) * scale + offsetX + panOffset.x;
     const screenY = (canvasPoint.y - offsetY) * scale + offsetY + panOffset.y;
-    
+
     return { x: screenX, y: screenY };
   };
-  
+
   // Get minimum font size for mobile readability
   const getFontSize = (baseSize: number): number => {
-    if (typeof window === 'undefined') return baseSize;
+    if (typeof window === "undefined") return baseSize;
     const isMobile = window.innerWidth < 768;
     const minSize = isMobile ? 16 : baseSize;
     return Math.max(minSize, baseSize);
   };
-  
+
   const textEditor = useTextEditor({
     screenPosition: screenTextPosition,
     fontSize: getFontSize(strokeWidth * 8),
@@ -178,17 +182,19 @@ export default function DrawingCanvas() {
     viewport: viewportSizeRef.current,
     active: isEditingText,
   });
-  
+
   // Update screen position when text position, zoom, or pan changes
   useEffect(() => {
     if (isEditingText && canvasRef.current) {
       const scale = zoom / 100;
       const offsetX = viewportSizeRef.current.width / 2;
       const offsetY = viewportSizeRef.current.height / 2;
-      
-      const screenX = (textPosition.x - offsetX) * scale + offsetX + panOffset.x;
-      const screenY = (textPosition.y - offsetY) * scale + offsetY + panOffset.y;
-      
+
+      const screenX =
+        (textPosition.x - offsetX) * scale + offsetX + panOffset.x;
+      const screenY =
+        (textPosition.y - offsetY) * scale + offsetY + panOffset.y;
+
       setScreenTextPosition({ x: screenX, y: screenY });
     }
   }, [isEditingText, textPosition, zoom, panOffset]);
@@ -220,7 +226,8 @@ export default function DrawingCanvas() {
   };
 
   const requestPreviewRender = () => {
-    if (previewRafIdRef.current != null) cancelAnimationFrame(previewRafIdRef.current);
+    if (previewRafIdRef.current != null)
+      cancelAnimationFrame(previewRafIdRef.current);
     previewRafIdRef.current = requestAnimationFrame(() => {
       previewRafIdRef.current = null;
       redrawPreview();
@@ -265,7 +272,8 @@ export default function DrawingCanvas() {
       ro.disconnect();
       window.removeEventListener("resize", onWindowResize);
       if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
-      if (previewRafIdRef.current != null) cancelAnimationFrame(previewRafIdRef.current);
+      if (previewRafIdRef.current != null)
+        cancelAnimationFrame(previewRafIdRef.current);
     };
   }, []);
 
@@ -449,7 +457,13 @@ export default function DrawingCanvas() {
     ctx.translate(-offsetX, -offsetY);
 
     if (currentShape && currentShape.type === "pencil") {
-      drawPencilStylized(ctx, currentShape.points, currentShape.color, currentShape.strokeWidth,  Math.max(0, Math.min(1, roughness)));
+      drawPencilStylized(
+        ctx,
+        currentShape.points,
+        currentShape.color,
+        currentShape.strokeWidth,
+        Math.max(0, Math.min(1, roughness))
+      );
     }
   };
 
@@ -465,7 +479,13 @@ export default function DrawingCanvas() {
     ctx.lineJoin = "round";
 
     if (shape.type === "pencil") {
-      drawPencilStylized(ctx, shape.points, shape.color, shape.strokeWidth, Math.max(0, Math.min(1, roughness)));
+      drawPencilStylized(
+        ctx,
+        shape.points,
+        shape.color,
+        shape.strokeWidth,
+        Math.max(0, Math.min(1, roughness))
+      );
     } else if (shape.type === "line") {
       if (shape.points.length < 2) return;
       ctx.beginPath();
@@ -569,7 +589,10 @@ export default function DrawingCanvas() {
   ) => {
     if (points.length < 2) return;
     const smoothed = smoothPoints(points);
-    const jittered = applyJitter(smoothed, Math.max(0, Math.min(1, rough)) * Math.max(0.2, width * 0.2));
+    const jittered = applyJitter(
+      smoothed,
+      Math.max(0, Math.min(1, rough)) * Math.max(0.2, width * 0.2)
+    );
     ctx.strokeStyle = color;
     ctx.lineWidth = width;
     ctx.lineCap = "round";
@@ -581,7 +604,10 @@ export default function DrawingCanvas() {
       const midY = (jittered[i].y + jittered[i + 1].y) / 2;
       ctx.quadraticCurveTo(jittered[i].x, jittered[i].y, midX, midY);
     }
-    ctx.lineTo(jittered[jittered.length - 1].x, jittered[jittered.length - 1].y);
+    ctx.lineTo(
+      jittered[jittered.length - 1].x,
+      jittered[jittered.length - 1].y
+    );
     ctx.stroke();
   };
 
@@ -591,7 +617,9 @@ export default function DrawingCanvas() {
     const half = Math.floor(windowSize / 2);
     const out: Point[] = [];
     for (let i = 0; i < pts.length; i++) {
-      let sumX = 0, sumY = 0, count = 0;
+      let sumX = 0,
+        sumY = 0,
+        count = 0;
       for (let j = -half; j <= half; j++) {
         const idx = Math.min(pts.length - 1, Math.max(0, i + j));
         sumX += pts[idx].x;
@@ -636,20 +664,22 @@ export default function DrawingCanvas() {
     setHistoryIndex(newHistory.length - 1);
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const handleMouseDown = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     // Get coordinates from mouse or touch event
-    const clientX = 'touches' in e ? e.touches[0]?.clientX : e.clientX;
-    const clientY = 'touches' in e ? e.touches[0]?.clientY : e.clientY;
-    
+    const clientX = "touches" in e ? e.touches[0]?.clientX : e.clientX;
+    const clientY = "touches" in e ? e.touches[0]?.clientY : e.clientY;
+
     if (clientX === undefined || clientY === undefined) return;
-    
+
     // Create a synthetic mouse event for getMousePos
     const syntheticEvent = {
       ...e,
       clientX,
       clientY,
     } as React.MouseEvent<HTMLCanvasElement>;
-    
+
     const point = getMousePos(syntheticEvent);
 
     if (tool === "hand") {
@@ -705,42 +735,45 @@ export default function DrawingCanvas() {
         const screenX = clientX - rect.left;
         const screenY = clientY - rect.top;
         setScreenTextPosition({ x: screenX, y: screenY });
-        
+
         // Focus the input after state updates
         // Use a longer timeout for mobile devices
-        const isTouchEvent = 'touches' in e;
+        const isTouchEvent = "touches" in e;
         requestAnimationFrame(() => {
-          setTimeout(() => {
-            if (textEditor.ref.current) {
-              // For mobile, try to scroll into view but don't force it
-              if (isTouchEvent) {
-                try {
-                  textEditor.ref.current.scrollIntoView({ 
-                    behavior: 'smooth', 
-                    block: 'center',
-                    inline: 'nearest'
-                  });
-                } catch (e) {
-                  // Ignore scroll errors on mobile
+          setTimeout(
+            () => {
+              if (textEditor.ref.current) {
+                // For mobile, try to scroll into view but don't force it
+                if (isTouchEvent) {
+                  try {
+                    textEditor.ref.current.scrollIntoView({
+                      behavior: "smooth",
+                      block: "center",
+                      inline: "nearest",
+                    });
+                  } catch (e) {
+                    // Ignore scroll errors on mobile
+                  }
+                }
+
+                // Focus the input
+                textEditor.ref.current.focus();
+
+                // On mobile, just position cursor at start
+                if (isTouchEvent && textEditor.ref.current.setSelectionRange) {
+                  setTimeout(() => {
+                    if (textEditor.ref.current) {
+                      textEditor.ref.current.setSelectionRange(0, 0);
+                    }
+                  }, 50);
+                } else if (!isTouchEvent) {
+                  // On desktop, select all text
+                  textEditor.ref.current.select();
                 }
               }
-              
-              // Focus the input
-              textEditor.ref.current.focus();
-              
-              // On mobile, just position cursor at start
-              if (isTouchEvent && textEditor.ref.current.setSelectionRange) {
-                setTimeout(() => {
-                  if (textEditor.ref.current) {
-                    textEditor.ref.current.setSelectionRange(0, 0);
-                  }
-                }, 50);
-              } else if (!isTouchEvent) {
-                // On desktop, select all text
-                textEditor.ref.current.select();
-              }
-            }
-          }, isTouchEvent ? 150 : 50);
+            },
+            isTouchEvent ? 150 : 50
+          );
         });
       }
       return;
@@ -932,7 +965,6 @@ export default function DrawingCanvas() {
     setIsDragging(false);
   };
 
-  
   const handleTextComplete = () => {
     if (textValue.trim()) {
       const canvas = canvasRef.current;
@@ -986,9 +1018,18 @@ export default function DrawingCanvas() {
     link.click();
   };
 
-  const handleZoomIn = () => setZoom(Math.min(zoom + 10, 200));
-  const handleZoomOut = () => setZoom(Math.max(zoom - 10, 50));
+  // Zoom in the canvas
+  const handleZoomIn = () => {
+    setZoom(Math.min(zoom + 10, 200));
+    requestRender();
+  }
+  // Zoom out the canvas
+  const handleZoomOut = () => {
+    setZoom(Math.max(zoom - 10, 50));
+    requestRender();
+  }
 
+  // Undo the last action
   const handleUndo = () => {
     if (historyIndex > 0) {
       setHistoryIndex(historyIndex - 1);
@@ -997,6 +1038,7 @@ export default function DrawingCanvas() {
     }
   };
 
+  // Redo the last action
   const handleRedo = () => {
     if (historyIndex < history.length - 1) {
       setHistoryIndex(historyIndex + 1);
@@ -1005,10 +1047,20 @@ export default function DrawingCanvas() {
     }
   };
 
+  // Clear the canvas
   const handleClear = () => {
+    // Save the current state to history
     saveToHistory();
+    // Clear the canvas
     setShapes([]);
+    // Clear the selected shape
     setSelectedShapeId(null);
+    // Clear all in the canvas
+    setCurrentShape(null);
+    // Clear the preview canvas
+    requestPreviewRender();
+    // Clear the canvas
+    requestRender();
   };
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1208,7 +1260,10 @@ export default function DrawingCanvas() {
       </header>
 
       <div className="relative flex-1 overflow-hidden">
-        <div ref={containerRef} className="canvas-dots absolute inset-0 bg-[oklch(0.98_0_0)] dark:bg-[oklch(0.14_0_0)]">
+        <div
+          ref={containerRef}
+          className="canvas-dots absolute inset-0 bg-[oklch(0.98_0_0)] dark:bg-[oklch(0.14_0_0)]"
+        >
           {/* Base canvas (committed drawings) */}
           <canvas
             ref={canvasRef}
@@ -1268,20 +1323,20 @@ export default function DrawingCanvas() {
                 setTextValue(e.target.value);
                 requestAnimationFrame(() => {
                   if (textEditor.ref.current) {
-                    textEditor.ref.current.style.height = 'auto';
+                    textEditor.ref.current.style.height = "auto";
                     textEditor.ref.current.style.height = `${textEditor.ref.current.scrollHeight}px`;
                   }
                 });
               }}
               onBlur={handleTextComplete}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
+                if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   handleTextComplete();
                 }
-                if (e.key === 'Escape') {
+                if (e.key === "Escape") {
                   setIsEditingText(false);
-                  setTextValue('');
+                  setTextValue("");
                 }
               }}
               className="absolute border-2 border-blue-500 bg-white px-2 py-1 text-base outline-none dark:bg-card z-[100] resize-none"
@@ -1551,14 +1606,14 @@ export default function DrawingCanvas() {
             >
               <Download className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
-            <Button
+            {/* <Button
               variant="ghost"
               size="icon"
               className="h-9 w-9 rounded-lg sm:h-10 sm:w-10"
               title="Más opciones"
             >
               <MoreHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
+            </Button> */}
           </div>
         </div>
 
