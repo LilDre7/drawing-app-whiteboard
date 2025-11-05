@@ -23,7 +23,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function MenuComponent() {
   return (
-    <div className="flex h-full items-center gap-3 border-r px-4">
+    <div className="flex h-full items-center gap-3 px-4">
       <Sheet>
         <SheetTrigger asChild>
           <Button variant="ghost" size="icon" className="h-7 w-7">

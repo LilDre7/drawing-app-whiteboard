@@ -423,21 +423,25 @@ export default function DrawingCanvas() {
     ctx.scale(scale, scale);
     ctx.translate(-offsetX, -offsetY);
 
+    // Dibujar solo los shapes comprometidos (committed shapes)
     shapes.forEach((shape) => {
       if ((isDragging || isResizing) && shape.id === selectedShapeId) return;
       drawShape(ctx, shape, shape.id === selectedShapeId);
     });
 
+    // Dibujar el shape que se está arrastrando
     if (draggedShape) {
       drawShape(ctx, draggedShape, true);
     }
 
-    // Do NOT draw current pencil stroke here; preview canvas handles it
-    if (currentShape && currentShape.type !== "pencil") {
+    // IMPORTANTE: Dibujar currentShape SOLO si NO es pencil y está dibujando
+    // Los pencil strokes van SOLO en el preview canvas
+    if (currentShape && currentShape.type !== "pencil" && isDrawing) {
       drawShape(ctx, currentShape, false);
     }
   };
 
+  // Redraw only the preview (transient) content
   // Redraw only the preview (transient) content
   const redrawPreview = () => {
     const canvas = previewCanvasRef.current;
@@ -445,8 +449,16 @@ export default function DrawingCanvas() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const dpr = devicePixelRatioRef.current;
+
+    // Siempre limpiar primero
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Solo dibujar si hay un currentShape de tipo pencil Y está dibujando activamente
+    if (!currentShape || currentShape.type !== "pencil" || !isDrawing) {
+      return;
+    }
+
     ctx.scale(dpr, dpr);
 
     const scale = zoom / 100;
@@ -456,15 +468,14 @@ export default function DrawingCanvas() {
     ctx.scale(scale, scale);
     ctx.translate(-offsetX, -offsetY);
 
-    if (currentShape && currentShape.type === "pencil") {
-      drawPencilStylized(
-        ctx,
-        currentShape.points,
-        currentShape.color,
-        currentShape.strokeWidth,
-        Math.max(0, Math.min(1, roughness))
-      );
-    }
+    // Dibujar el trazo de pencil en progreso
+    drawPencilStylized(
+      ctx,
+      currentShape.points,
+      currentShape.color,
+      currentShape.strokeWidth,
+      Math.max(0, Math.min(1, roughness))
+    );
   };
 
   // Draw the shape on the canvas
@@ -821,7 +832,6 @@ export default function DrawingCanvas() {
         const deltaX = point.x - resizeStart.x;
         const deltaY = point.y - resizeStart.y;
 
-        // Calculate new size based on which handle is being dragged
         let newWidth = originalSize.width;
         let newHeight = originalSize.height;
         let newX = shape.points[0].x;
@@ -830,30 +840,25 @@ export default function DrawingCanvas() {
         const aspectRatio = originalSize.width / originalSize.height;
 
         if (resizeHandle === "se") {
-          // Bottom-right: increase size
           const delta = Math.max(deltaX, deltaY);
           newWidth = originalSize.width + delta;
           newHeight = newWidth / aspectRatio;
         } else if (resizeHandle === "nw") {
-          // Top-left: decrease size and move position
           const delta = Math.min(deltaX, deltaY);
           newWidth = originalSize.width - delta;
           newHeight = newWidth / aspectRatio;
           newX = shape.points[0].x + delta;
           newY = shape.points[0].y + delta;
         } else if (resizeHandle === "ne") {
-          // Top-right
           newWidth = originalSize.width + deltaX;
           newHeight = newWidth / aspectRatio;
           newY = shape.points[0].y + deltaY;
         } else if (resizeHandle === "sw") {
-          // Bottom-left
           newWidth = originalSize.width - deltaX;
           newHeight = newWidth / aspectRatio;
           newX = shape.points[0].x + deltaX;
         }
 
-        // Ensure minimum size
         if (newWidth > 20 && newHeight > 20) {
           const updatedShape = {
             ...shape,
@@ -908,13 +913,14 @@ export default function DrawingCanvas() {
         ...currentShape,
         points: [...currentShape.points, point],
       });
-      requestPreviewRender();
+      requestPreviewRender(); // Preview solo
     } else {
+      // Para líneas, rectángulos, círculos
       setCurrentShape({
         ...currentShape,
         points: [currentShape.points[0], point],
       });
-      requestRender();
+      requestRender(); // Canvas base
     }
   };
 
@@ -957,12 +963,14 @@ export default function DrawingCanvas() {
       saveToHistory();
       setShapes([...shapes, shapeWithBounds as Shape]);
       setCurrentShape(null);
-      // clear preview layer after committing
-      requestPreviewRender();
-      requestRender();
     }
+
     setIsDrawing(false);
     setIsDragging(false);
+
+    // Limpiar ambos canvas
+    requestPreviewRender();
+    requestRender();
   };
 
   const handleTextComplete = () => {
@@ -1022,12 +1030,12 @@ export default function DrawingCanvas() {
   const handleZoomIn = () => {
     setZoom(Math.min(zoom + 10, 200));
     requestRender();
-  }
+  };
   // Zoom out the canvas
   const handleZoomOut = () => {
     setZoom(Math.max(zoom - 10, 50));
     requestRender();
-  }
+  };
 
   // Undo the last action
   const handleUndo = () => {
@@ -1182,80 +1190,135 @@ export default function DrawingCanvas() {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-background">
-      <header className="flex h-12 items-center border-b bg-white dark:bg-card">
-        {/* Left section - Menu and controls */}
-        <MenuComponent />
+    <div className="flex h-screen flex-col bg-trasnparet mb-4">
+      <header className="flex h-12 items-center mb-4 border-b dark:bg-slate-950 md:border-0 md:bg-transparent md:px-4 md:pt-4">
+        <div className="flex h-full w-full items-center md:gap-3">
+          {/* Menu block - Solo en desktop con borde */}
+          <div className="flex h-full items-center border-r px-3 md:rounded-lg md:border md:border-slate-200 md:px-3 dark:md:border-slate-800">
+            <MenuComponent />
+          </div>
 
-        {/* Center section - History controls - Desktop only */}
-        <div className="hidden h-full items-center gap-1 border-r px-2 sm:px-3 md:flex">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleUndo}
-            disabled={historyIndex <= 0}
-            title="Deshacer"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7"
-            onClick={handleRedo}
-            disabled={historyIndex >= history.length - 1}
-            title="Rehacer"
-          >
-            <RotateCw className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-
-        {/* Center section - Title */}
-        <div className="flex flex-1 items-center justify-center">
-          {isEditingTitle ? (
-            <input
-              ref={titleInputRef}
-              type="text"
-              value={projectTitle}
-              onChange={(e) => setProjectTitle(e.target.value)}
-              onBlur={handleTitleComplete}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") handleTitleComplete();
-                if (e.key === "Escape") {
-                  setIsEditingTitle(false);
-                  setProjectTitle(projectTitle || "Untitled Project");
-                }
-              }}
-              className="border-b-2 border-blue-500 bg-transparent px-2 text-center text-sm text-foreground outline-none"
-              style={{ width: `${Math.max(projectTitle.length * 8, 100)}px` }}
-            />
-          ) : (
-            <span
-              className="cursor-pointer text-sm text-muted-foreground hover:text-foreground"
-              onClick={handleTitleClick}
-              title="Click para editar"
+          {/* History controls - Desktop only como bloque separado */}
+          <div className="hidden h-full items-center gap-0.5 md:flex md:rounded-lg md:border md:border-slate-200 md:px-2 dark:md:border-slate-800">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              onClick={handleUndo}
+              disabled={historyIndex <= 0}
+              title="Deshacer"
             >
-              {projectTitle}
-            </span>
-          )}
-        </div>
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              onClick={handleRedo}
+              disabled={historyIndex >= history.length - 1}
+              title="Rehacer"
+            >
+              <RotateCw className="h-4 w-4" />
+            </Button>
+          </div>
 
-        {/* Right section - Share button */}
-        <div className="flex h-full items-center border-l px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn("h-7 w-7", showShareConfirm && "text-green-600")}
-            onClick={handleShare}
-            title="Compartir"
-          >
-            {showShareConfirm ? (
-              <Check className="h-3.5 w-3.5" />
-            ) : (
-              <Link2 className="h-3.5 w-3.5" />
-            )}
-          </Button>
+          {/* Center section - App Name (sin bloque) */}
+          <div className="flex flex-1 items-center justify-center">
+            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+            </span>
+          </div>
+
+          {/* Right section - Actions con nombre de proyecto */}
+          <div className="flex h-full items-center gap-2 border-l px-2 md:rounded-lg md:border md:border-slate-200 md:px-3 dark:md:border-slate-800">
+            {/* Project Title - Desktop only */}
+            <div className="hidden items-center gap-2 md:flex">
+              {isEditingTitle ? (
+                <input
+                  ref={titleInputRef}
+                  type="text"
+                  value={projectTitle}
+                  onChange={(e) => setProjectTitle(e.target.value)}
+                  onBlur={handleTitleComplete}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleTitleComplete();
+                    if (e.key === "Escape") {
+                      setIsEditingTitle(false);
+                      setProjectTitle(projectTitle || "Untitled Project");
+                    }
+                  }}
+                  className="border-b border-slate-900 bg-transparent px-2 text-sm text-slate-900 outline-none dark:border-slate-100 dark:text-slate-100"
+                  style={{
+                    width: `${Math.max(projectTitle.length * 8, 100)}px`,
+                  }}
+                />
+              ) : (
+                <button
+                  className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-100"
+                  onClick={handleTitleClick}
+                  title="Click para editar el nombre del proyecto"
+                >
+                  <svg
+                    className="h-3.5 w-3.5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                    />
+                  </svg>
+                  {projectTitle}
+                </button>
+              )}
+              <div className="h-6 w-px bg-slate-200 dark:bg-slate-800" />
+            </div>
+
+            {/* Export - Desktop only */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 md:flex"
+              onClick={saveAsImage}
+              title="Exportar"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+
+            {/* Clear - Desktop only */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="hidden h-8 w-8 text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 md:flex"
+              onClick={handleClear}
+              title="Borrar todo"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+
+            <div className="mx-1 hidden h-6 w-px bg-slate-200 dark:bg-slate-800 md:block" />
+
+            {/* Share */}
+            <Button
+              variant="ghost"
+              size="icon"
+              className={`h-8 w-8 ${
+                showShareConfirm
+                  ? "text-green-600 dark:text-green-400"
+                  : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              }`}
+              onClick={handleShare}
+              title="Compartir"
+            >
+              {showShareConfirm ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Link2 className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
         </div>
       </header>
 
