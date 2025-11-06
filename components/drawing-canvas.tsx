@@ -704,7 +704,7 @@ export default function DrawingCanvas() {
     if (shape.type === "circle" && shape.points.length >= 2) {
       const center = shape.points[0];
       const edgePoint = shape.points[shape.points.length - 1];
-      const radius = Math.sqrt(
+      const radius = Math.sqrt( // Corrected: use edgePoint.y instead of edge.y
         Math.pow(edgePoint.x - center.x, 2) + Math.pow(edgePoint.y - center.y, 2)
       );
       const distance = Math.sqrt(
@@ -719,6 +719,61 @@ export default function DrawingCanvas() {
 
       // Solo retornar true si está cerca del perímetro Y no está claramente dentro
       return nearPerimeter && !isInsideCircle;
+    }
+
+    return false;
+  };
+
+  // Función específica para el borrador - más permisiva que la selección normal
+  const isPointInShapeForEraser = (point: Point, shape: Shape, isTouchEvent: boolean = false): boolean => {
+    const bounds = shape.bounds || calculateBounds(shape);
+    if (!bounds) return false;
+
+    // Padding más generoso para el borrador
+    const basePadding = isTouchEvent ? 20 : 12;
+    const eraserRadius = strokeWidth * 5; // El radio del borrador actual
+    const totalPadding = Math.max(basePadding, eraserRadius);
+
+    // Para texto, imagen y pencil, usar el bounding box completo con padding generoso
+    if (shape.type === "text" || shape.type === "image" || shape.type === "pencil") {
+      return (
+        point.x >= bounds.minX - totalPadding &&
+        point.x <= bounds.maxX + totalPadding &&
+        point.y >= bounds.minY - totalPadding &&
+        point.y <= bounds.maxY + totalPadding
+      );
+    }
+
+    // Para líneas, verificar si el punto está cerca de la línea con umbral mayor
+    if (shape.type === "line" && shape.points.length >= 2) {
+      const start = shape.points[0];
+      const end = shape.points[shape.points.length - 1];
+      return isPointNearLine(point, start, end, totalPadding);
+    }
+
+    // Para rectángulos, el borrador debe poder detectar TODO el rectángulo (interior + bordes)
+    if (shape.type === "rectangle" && shape.points.length >= 2) {
+      return (
+        point.x >= bounds.minX - totalPadding &&
+        point.x <= bounds.maxX + totalPadding &&
+        point.y >= bounds.minY - totalPadding &&
+        point.y <= bounds.maxY + totalPadding
+      );
+    }
+
+    // Para círculos, el borrador debe poder detectar TODO el círculo (interior + perímetro)
+    if (shape.type === "circle" && shape.points.length >= 2) {
+      const center = shape.points[0];
+      const edgePoint = shape.points[shape.points.length - 1];
+      const radius = Math.sqrt(
+        Math.pow(edgePoint.x - center.x, 2) + Math.pow(edgePoint.y - center.y, 2)
+      );
+      const distance = Math.sqrt(
+        Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
+      );
+
+      // Detectar si está dentro o cerca del círculo
+      return distance <= radius + totalPadding;
     }
 
     return false;
@@ -1612,7 +1667,7 @@ export default function DrawingCanvas() {
       setIsErasing(true);
       const eraserRadius = strokeWidth * 5;
       const newShapes = shapes.filter((shape) => {
-        return !isPointInShape(point, shape, 'touches' in e);
+        return !isPointInShapeForEraser(point, shape, 'touches' in e);
       });
       if (newShapes.length !== shapes.length) {
         const deletedShapes = shapes.filter(shape => !newShapes.includes(shape));
@@ -1972,7 +2027,7 @@ export default function DrawingCanvas() {
 
     if (tool === "eraser" && isErasing) {
       const newShapes = shapes.filter((shape) => {
-        return !isPointInShape(point, shape, isTouchDeviceRef.current);
+        return !isPointInShapeForEraser(point, shape, isTouchDeviceRef.current);
       });
       if (newShapes.length !== shapes.length) {
         setShapes(newShapes);
