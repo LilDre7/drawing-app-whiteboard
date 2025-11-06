@@ -17,6 +17,9 @@ import {
 import {
   Sheet,
   SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,7 +34,14 @@ export default function MenuComponent() {
           </Button>
         </SheetTrigger>
         <SheetContent side="left" className="w-full p-4 sm:w-[380px] overflow-y-auto">
-          <Tabs defaultValue="help" className="mt-4 sm:mt-6">
+          <SheetHeader className="sr-only">
+            <SheetTitle>Menú de Ayuda y Configuración</SheetTitle>
+            <SheetDescription>
+              Accede a la ayuda, tips y información sobre la aplicación de whiteboard.
+              Encuentra guías para todas las herramientas de dibujo y funciones disponibles.
+            </SheetDescription>
+          </SheetHeader>
+          <Tabs defaultValue="help" className="mt-4 pt-4 sm:mt-6 ">
             <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="help" className="text-xs sm:text-sm">Ayuda</TabsTrigger>
               <TabsTrigger value="tips" className="text-xs sm:text-sm">Tips</TabsTrigger>
@@ -187,7 +197,7 @@ export default function MenuComponent() {
           </Tabs>
         </SheetContent>
       </Sheet>
-      <span className="text-sm font-medium text-foreground">Whiteboard</span>
+      <span className="text-sm font-medium text-foreground"></span>
     </div>
   );
 }

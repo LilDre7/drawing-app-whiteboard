@@ -46,21 +46,27 @@ function useTextEditor(params: {
 
   // Desired absolute position over the canvas (baseline -> top conversion)
   // Ensure text editor stays within reasonable bounds
-  const left = Math.max(padding, Math.min(screenPosition.x, viewport.width - 100));
-  const top = Math.max(padding, Math.min(screenPosition.y - fontSize - 4, viewport.height - 50));
+  const left = Math.max(
+    padding,
+    Math.min(screenPosition.x, viewport.width - 100)
+  );
+  const top = Math.max(
+    padding,
+    Math.min(screenPosition.y - fontSize - 4, viewport.height - 50)
+  );
 
   // Hide only if completely outside viewport with generous tolerance
   const tolerance = 150; // Allow 150px tolerance outside viewport
   // Use safe fallback values for SSR
   const getSafeViewportWidth = () => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       return viewport.width || window.innerWidth || 1000;
     }
     return viewport.width || 1000;
   };
 
   const getSafeViewportHeight = () => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== "undefined") {
       return viewport.height || window.innerHeight || 800;
     }
     return viewport.height || 800;
@@ -97,12 +103,13 @@ function useTextEditor(params: {
     boxShadow: "none",
     outline: "none",
     resize: "none",
-    fontFamily: "'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontFamily:
+      "'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontWeight: "400",
     display: hidden ? "none" : undefined,
     zIndex: 1000,
     textAlign: "left",
-      caretColor: "#3b82f6",
+    caretColor: "#3b82f6",
   };
 
   return { ref, style, hidden } as const;
@@ -142,7 +149,16 @@ interface Shape {
   };
 }
 
-type ResizeHandle = "nw" | "ne" | "sw" | "se" | "text-nw" | "text-ne" | "text-sw" | "text-se" | null;
+type ResizeHandle =
+  | "nw"
+  | "ne"
+  | "sw"
+  | "se"
+  | "text-nw"
+  | "text-ne"
+  | "text-sw"
+  | "text-se"
+  | null;
 
 // Command Pattern interfaces for undo/redo system
 interface Command {
@@ -179,10 +195,18 @@ interface ModifyShapeCommand extends Command {
   newShape: Shape;
 }
 
-type HistoryCommand = AddShapeCommand | DeleteShapesCommand | MoveShapeCommand | ModifyShapeCommand;
+type HistoryCommand =
+  | AddShapeCommand
+  | DeleteShapesCommand
+  | MoveShapeCommand
+  | ModifyShapeCommand;
 
 // Command factory functions
-const createAddShapeCommand = (shape: Shape, addShape: (shape: Shape) => void, removeShape: (shapeId: string) => void): AddShapeCommand => ({
+const createAddShapeCommand = (
+  shape: Shape,
+  addShape: (shape: Shape) => void,
+  removeShape: (shapeId: string) => void
+): AddShapeCommand => ({
   type: "addShape",
   shape,
   execute() {
@@ -193,22 +217,26 @@ const createAddShapeCommand = (shape: Shape, addShape: (shape: Shape) => void, r
   },
   getDescription() {
     return `Agregar ${shape.type}`;
-  }
+  },
 });
 
-const createDeleteShapesCommand = (shapes: Shape[], addShape: (shape: Shape) => void, removeShape: (shapeId: string) => void): DeleteShapesCommand => ({
+const createDeleteShapesCommand = (
+  shapes: Shape[],
+  addShape: (shape: Shape) => void,
+  removeShape: (shapeId: string) => void
+): DeleteShapesCommand => ({
   type: "deleteShapes",
   shapes,
   execute() {
-    shapes.forEach(shape => removeShape(shape.id));
+    shapes.forEach((shape) => removeShape(shape.id));
   },
   undo() {
-    shapes.forEach(shape => addShape(shape));
+    shapes.forEach((shape) => addShape(shape));
   },
   getDescription() {
-    const shapeTypes = shapes.map(s => s.type).join(", ");
+    const shapeTypes = shapes.map((s) => s.type).join(", ");
     return `Eliminar ${shapeTypes}`;
-  }
+  },
 });
 
 const createMoveShapeCommand = (
@@ -219,7 +247,12 @@ const createMoveShapeCommand = (
   oldImageHeight: number | undefined,
   newImageWidth: number | undefined,
   newImageHeight: number | undefined,
-  updateShape: (shapeId: string, points: Point[], imageWidth?: number, imageHeight?: number) => void
+  updateShape: (
+    shapeId: string,
+    points: Point[],
+    imageWidth?: number,
+    imageHeight?: number
+  ) => void
 ): MoveShapeCommand => ({
   type: "moveShape",
   shapeId,
@@ -237,7 +270,7 @@ const createMoveShapeCommand = (
   },
   getDescription() {
     return `Mover figura`;
-  }
+  },
 });
 
 const createModifyShapeCommand = (
@@ -258,7 +291,7 @@ const createModifyShapeCommand = (
   },
   getDescription() {
     return `Modificar ${newShape.type}`;
-  }
+  },
 });
 
 export default function DrawingCanvas() {
@@ -372,35 +405,46 @@ export default function DrawingCanvas() {
 
   // Helper functions for shape manipulation
   const addShape = (shape: Shape) => {
-    setShapes(prev => [...prev, shape]);
+    setShapes((prev) => [...prev, shape]);
   };
 
   const removeShape = (shapeId: string) => {
-    setShapes(prev => prev.filter(shape => shape.id !== shapeId));
+    setShapes((prev) => prev.filter((shape) => shape.id !== shapeId));
   };
 
-  const updateShape = (shapeId: string, points: Point[], imageWidth?: number, imageHeight?: number) => {
-    setShapes(prev => prev.map(shape => {
-      if (shape.id === shapeId) {
-        const updatedShape = { ...shape, points };
-        if (imageWidth !== undefined) updatedShape.imageWidth = imageWidth;
-        if (imageHeight !== undefined) updatedShape.imageHeight = imageHeight;
-        updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
-        return updatedShape;
-      }
-      return shape;
-    }));
+  const updateShape = (
+    shapeId: string,
+    points: Point[],
+    imageWidth?: number,
+    imageHeight?: number
+  ) => {
+    setShapes((prev) =>
+      prev.map((shape) => {
+        if (shape.id === shapeId) {
+          const updatedShape = { ...shape, points };
+          if (imageWidth !== undefined) updatedShape.imageWidth = imageWidth;
+          if (imageHeight !== undefined) updatedShape.imageHeight = imageHeight;
+          updatedShape.bounds = calculateBounds(
+            updatedShape
+          ) as Shape["bounds"];
+          return updatedShape;
+        }
+        return shape;
+      })
+    );
   };
 
   const updateShapeFully = (shapeId: string, newShape: Shape) => {
-    setShapes(prev => prev.map(shape =>
-      shape.id === shapeId ? { ...newShape, id: shapeId } : shape
-    ));
+    setShapes((prev) =>
+      prev.map((shape) =>
+        shape.id === shapeId ? { ...newShape, id: shapeId } : shape
+      )
+    );
   };
 
   // New saveToHistory function for commands
   const saveToHistory = (command: HistoryCommand) => {
-    setCommands(prev => {
+    setCommands((prev) => {
       // Eliminar comandos futuros si estamos en medio del historial
       const newCommands = prev.slice(0, commandIndex + 1);
       // Agregar el nuevo comando
@@ -411,7 +455,7 @@ export default function DrawingCanvas() {
       }
       return newCommands;
     });
-    setCommandIndex(prev => Math.min(prev + 1, MAX_COMMANDS - 1));
+    setCommandIndex((prev) => Math.min(prev + 1, MAX_COMMANDS - 1));
   };
   const [isErasing, setIsErasing] = useState(false);
   const [cursorStyle, setCursorStyle] = useState<string>("cursor-default");
@@ -468,7 +512,8 @@ export default function DrawingCanvas() {
       const targetHeight = Math.max(1, Math.round(rect.height * dpr));
 
       // Solo redimensionar si realmente es necesario o si se fuerza
-      const needsResize = canvas.width !== targetWidth || canvas.height !== targetHeight;
+      const needsResize =
+        canvas.width !== targetWidth || canvas.height !== targetHeight;
 
       if (needsResize || force) {
         canvas.width = targetWidth;
@@ -491,7 +536,7 @@ export default function DrawingCanvas() {
         const rect = container.getBoundingClientRect();
         viewportSizeRef.current = {
           width: rect.width,
-          height: rect.height
+          height: rect.height,
         };
         // No llamar a applySize() para evitar repintado
         return;
@@ -585,7 +630,10 @@ export default function DrawingCanvas() {
       return {
         minX: shape.points[0].x - fallbackPadding,
         minY: shape.points[0].y - fallbackSize - fallbackPadding,
-        maxX: shape.points[0].x + Math.max(shape.text.length * fallbackSize * 0.6, 50) + fallbackPadding,
+        maxX:
+          shape.points[0].x +
+          Math.max(shape.text.length * fallbackSize * 0.6, 50) +
+          fallbackPadding,
         maxY: shape.points[0].y + fallbackPadding,
       };
     }
@@ -636,7 +684,11 @@ export default function DrawingCanvas() {
   };
 
   // Check if the point is inside the shape
-  const isPointInShape = (point: Point, shape: Shape, isTouchEvent: boolean = false): boolean => {
+  const isPointInShape = (
+    point: Point,
+    shape: Shape,
+    isTouchEvent: boolean = false
+  ): boolean => {
     const bounds = shape.bounds || calculateBounds(shape);
     if (!bounds) return false;
 
@@ -644,14 +696,21 @@ export default function DrawingCanvas() {
     const basePadding = isTouchEvent ? 15 : 8;
 
     // Padding adicional basado en el grosor del stroke para figuras geométricas
-    const strokeWidthPadding = shape.type === "rectangle" || shape.type === "circle" || shape.type === "line"
-      ? Math.max(shape.strokeWidth * 2, 4)
-      : 0;
+    const strokeWidthPadding =
+      shape.type === "rectangle" ||
+      shape.type === "circle" ||
+      shape.type === "line"
+        ? Math.max(shape.strokeWidth * 2, 4)
+        : 0;
 
     const totalPadding = basePadding + strokeWidthPadding;
 
     // Para texto, imagen y pencil, usar el bounding box completo
-    if (shape.type === "text" || shape.type === "image" || shape.type === "pencil") {
+    if (
+      shape.type === "text" ||
+      shape.type === "image" ||
+      shape.type === "pencil"
+    ) {
       return (
         point.x >= bounds.minX - basePadding &&
         point.x <= bounds.maxX + basePadding &&
@@ -685,27 +744,53 @@ export default function DrawingCanvas() {
       const bottomLeft = { x: minX, y: maxY };
 
       // Verificar si está cerca de cualquier borde PERO no dentro del rectángulo
-      const nearTopEdge = isPointNearLine(point, topLeft, topRight, totalPadding);
-      const nearRightEdge = isPointNearLine(point, topRight, bottomRight, totalPadding);
-      const nearBottomEdge = isPointNearLine(point, bottomRight, bottomLeft, totalPadding);
-      const nearLeftEdge = isPointNearLine(point, bottomLeft, topLeft, totalPadding);
+      const nearTopEdge = isPointNearLine(
+        point,
+        topLeft,
+        topRight,
+        totalPadding
+      );
+      const nearRightEdge = isPointNearLine(
+        point,
+        topRight,
+        bottomRight,
+        totalPadding
+      );
+      const nearBottomEdge = isPointNearLine(
+        point,
+        bottomRight,
+        bottomLeft,
+        totalPadding
+      );
+      const nearLeftEdge = isPointNearLine(
+        point,
+        bottomLeft,
+        topLeft,
+        totalPadding
+      );
 
       // Verificar que el punto no esté claramente dentro del rectángulo (a menos que esté muy cerca del borde)
-      const isInsideRectangle = point.x > minX + totalPadding &&
-                               point.x < maxX - totalPadding &&
-                               point.y > minY + totalPadding &&
-                               point.y < maxY - totalPadding;
+      const isInsideRectangle =
+        point.x > minX + totalPadding &&
+        point.x < maxX - totalPadding &&
+        point.y > minY + totalPadding &&
+        point.y < maxY - totalPadding;
 
       // Solo retornar true si está cerca de un borde Y no está claramente dentro
-      return (nearTopEdge || nearRightEdge || nearBottomEdge || nearLeftEdge) && !isInsideRectangle;
+      return (
+        (nearTopEdge || nearRightEdge || nearBottomEdge || nearLeftEdge) &&
+        !isInsideRectangle
+      );
     }
 
     // Para círculos, verificar SOLO si el punto está cerca del perímetro (no el interior)
     if (shape.type === "circle" && shape.points.length >= 2) {
       const center = shape.points[0];
       const edgePoint = shape.points[shape.points.length - 1];
-      const radius = Math.sqrt( // Corrected: use edgePoint.y instead of edge.y
-        Math.pow(edgePoint.x - center.x, 2) + Math.pow(edgePoint.y - center.y, 2)
+      const radius = Math.sqrt(
+        // Corrected: use edgePoint.y instead of edge.y
+        Math.pow(edgePoint.x - center.x, 2) +
+          Math.pow(edgePoint.y - center.y, 2)
       );
       const distance = Math.sqrt(
         Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
@@ -725,7 +810,11 @@ export default function DrawingCanvas() {
   };
 
   // Función específica para el borrador - más permisiva que la selección normal
-  const isPointInShapeForEraser = (point: Point, shape: Shape, isTouchEvent: boolean = false): boolean => {
+  const isPointInShapeForEraser = (
+    point: Point,
+    shape: Shape,
+    isTouchEvent: boolean = false
+  ): boolean => {
     const bounds = shape.bounds || calculateBounds(shape);
     if (!bounds) return false;
 
@@ -735,7 +824,11 @@ export default function DrawingCanvas() {
     const totalPadding = Math.max(basePadding, eraserRadius);
 
     // Para texto, imagen y pencil, usar el bounding box completo con padding generoso
-    if (shape.type === "text" || shape.type === "image" || shape.type === "pencil") {
+    if (
+      shape.type === "text" ||
+      shape.type === "image" ||
+      shape.type === "pencil"
+    ) {
       return (
         point.x >= bounds.minX - totalPadding &&
         point.x <= bounds.maxX + totalPadding &&
@@ -766,7 +859,8 @@ export default function DrawingCanvas() {
       const center = shape.points[0];
       const edgePoint = shape.points[shape.points.length - 1];
       const radius = Math.sqrt(
-        Math.pow(edgePoint.x - center.x, 2) + Math.pow(edgePoint.y - center.y, 2)
+        Math.pow(edgePoint.x - center.x, 2) +
+          Math.pow(edgePoint.y - center.y, 2)
       );
       const distance = Math.sqrt(
         Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
@@ -780,7 +874,12 @@ export default function DrawingCanvas() {
   };
 
   // Helper function to check if a point is near a line segment
-  const isPointNearLine = (point: Point, start: Point, end: Point, threshold: number): boolean => {
+  const isPointNearLine = (
+    point: Point,
+    start: Point,
+    end: Point,
+    threshold: number
+  ): boolean => {
     // Calcular la distancia del punto a la línea
     const A = point.x - start.x;
     const B = point.y - start.y;
@@ -816,14 +915,20 @@ export default function DrawingCanvas() {
   };
 
   // Get the resize handle of the shape
-  const getResizeHandle = (point: Point, shape: Shape, isTouchEvent: boolean = false): ResizeHandle => {
+  const getResizeHandle = (
+    point: Point,
+    shape: Shape,
+    isTouchEvent: boolean = false
+  ): ResizeHandle => {
     if (shape.type === "text" && shape.bounds) {
       // Check for text resize handles at all four corners
       const basePadding = isTouchEvent ? 12 : 8;
       const selectionX = shape.bounds.minX - basePadding;
       const selectionY = shape.bounds.minY - basePadding;
-      const selectionWidth = shape.bounds.maxX - shape.bounds.minX + basePadding * 2;
-      const selectionHeight = shape.bounds.maxY - shape.bounds.minY + basePadding * 2;
+      const selectionWidth =
+        shape.bounds.maxX - shape.bounds.minX + basePadding * 2;
+      const selectionHeight =
+        shape.bounds.maxY - shape.bounds.minY + basePadding * 2;
       const handleSize = isTouchEvent ? 12 : 8;
 
       // Top-left corner handle
@@ -865,10 +970,15 @@ export default function DrawingCanvas() {
     if (shape.bounds) {
       const handleSize = isTouchEvent ? 12 : 8;
       const bounds = shape.bounds;
-      const padding = shape.type === "rectangle" || shape.type === "circle" ? 5 : 0;
+      const padding =
+        shape.type === "rectangle" || shape.type === "circle" ? 5 : 0;
 
       // Check each corner for rectangles and circles
-      if (shape.type === "rectangle" || shape.type === "circle" || shape.type === "image") {
+      if (
+        shape.type === "rectangle" ||
+        shape.type === "circle" ||
+        shape.type === "image"
+      ) {
         const paddedBounds = {
           minX: bounds.minX - padding,
           minY: bounds.minY - padding,
@@ -909,10 +1019,18 @@ export default function DrawingCanvas() {
         const end = shape.points[shape.points.length - 1];
 
         // Check line endpoints
-        if (Math.sqrt(Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2)) < handleSize) {
+        if (
+          Math.sqrt(
+            Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2)
+          ) < handleSize
+        ) {
           return "nw"; // Start point
         }
-        if (Math.sqrt(Math.pow(point.x - end.x, 2) + Math.pow(point.y - end.y, 2)) < handleSize) {
+        if (
+          Math.sqrt(
+            Math.pow(point.x - end.x, 2) + Math.pow(point.y - end.y, 2)
+          ) < handleSize
+        ) {
           return "se"; // End point
         }
       }
@@ -923,12 +1041,13 @@ export default function DrawingCanvas() {
 
   // Draw resize preview outline
   const drawResizePreview = (ctx: CanvasRenderingContext2D) => {
-    if (!isResizing || !selectedShapeId || !resizeHandle || !draggedShape) return;
+    if (!isResizing || !selectedShapeId || !resizeHandle || !draggedShape)
+      return;
 
     ctx.save();
 
     // Make the preview much more visible
-    ctx.strokeStyle = "#ff0000"; // Red color for high visibility 
+    ctx.strokeStyle = "#ff0000"; // Red color for high visibility
     ctx.lineWidth = 3; // Thicker lines
     ctx.setLineDash([8, 4]); // More prominent dashes
     ctx.fillStyle = "rgba(193, 168, 168, 0.15)"; // Red semi-transparent fill
@@ -944,12 +1063,34 @@ export default function DrawingCanvas() {
       // Draw corner indicators for extra visibility
       ctx.fillStyle = "#ff0000";
       const cornerSize = 6;
-      ctx.fillRect(start.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
-      ctx.fillRect(end.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
-      ctx.fillRect(start.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
-      ctx.fillRect(end.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
-
-    } else if (draggedShape.type === "circle" && draggedShape.points.length >= 2) {
+      ctx.fillRect(
+        start.x - cornerSize / 2,
+        start.y - cornerSize / 2,
+        cornerSize,
+        cornerSize
+      );
+      ctx.fillRect(
+        end.x - cornerSize / 2,
+        start.y - cornerSize / 2,
+        cornerSize,
+        cornerSize
+      );
+      ctx.fillRect(
+        start.x - cornerSize / 2,
+        end.y - cornerSize / 2,
+        cornerSize,
+        cornerSize
+      );
+      ctx.fillRect(
+        end.x - cornerSize / 2,
+        end.y - cornerSize / 2,
+        cornerSize,
+        cornerSize
+      );
+    } else if (
+      draggedShape.type === "circle" &&
+      draggedShape.points.length >= 2
+    ) {
       const center = draggedShape.points[0];
       const edge = draggedShape.points[draggedShape.points.length - 1];
       const radius = Math.sqrt(
@@ -967,8 +1108,10 @@ export default function DrawingCanvas() {
       ctx.beginPath();
       ctx.arc(center.x, center.y, 4, 0, 2 * Math.PI);
       ctx.fill();
-
-    } else if (draggedShape.type === "line" && draggedShape.points.length >= 2) {
+    } else if (
+      draggedShape.type === "line" &&
+      draggedShape.points.length >= 2
+    ) {
       const start = draggedShape.points[0];
       const end = draggedShape.points[draggedShape.points.length - 1];
 
@@ -1074,7 +1217,11 @@ export default function DrawingCanvas() {
 
     // Dibujar la forma actual en progreso (cualquier tipo)
     // Hacerla más visible durante el dibujo
-    if (currentShape.type === "line" || currentShape.type === "rectangle" || currentShape.type === "circle") {
+    if (
+      currentShape.type === "line" ||
+      currentShape.type === "rectangle" ||
+      currentShape.type === "circle"
+    ) {
       // Para formas geométricas, hacerlas más visibles
       ctx.save();
 
@@ -1091,19 +1238,36 @@ export default function DrawingCanvas() {
       if (currentShape.type === "line" && currentShape.points.length >= 2) {
         ctx.beginPath();
         ctx.moveTo(currentShape.points[0].x, currentShape.points[0].y);
-        ctx.lineTo(currentShape.points[currentShape.points.length - 1].x, currentShape.points[currentShape.points.length - 1].y);
+        ctx.lineTo(
+          currentShape.points[currentShape.points.length - 1].x,
+          currentShape.points[currentShape.points.length - 1].y
+        );
         ctx.stroke();
 
         // Dibujar puntos en los extremos para mayor visibilidad
         ctx.fillStyle = currentShape.color;
         ctx.beginPath();
-        ctx.arc(currentShape.points[0].x, currentShape.points[0].y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.arc(
+          currentShape.points[0].x,
+          currentShape.points[0].y,
+          Math.max(3, currentShape.strokeWidth / 2 + 1),
+          0,
+          2 * Math.PI
+        );
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(currentShape.points[currentShape.points.length - 1].x, currentShape.points[currentShape.points.length - 1].y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.arc(
+          currentShape.points[currentShape.points.length - 1].x,
+          currentShape.points[currentShape.points.length - 1].y,
+          Math.max(3, currentShape.strokeWidth / 2 + 1),
+          0,
+          2 * Math.PI
+        );
         ctx.fill();
-
-      } else if (currentShape.type === "rectangle" && currentShape.points.length >= 2) {
+      } else if (
+        currentShape.type === "rectangle" &&
+        currentShape.points.length >= 2
+      ) {
         const start = currentShape.points[0];
         const end = currentShape.points[currentShape.points.length - 1];
 
@@ -1112,13 +1276,35 @@ export default function DrawingCanvas() {
 
         // Añadir puntos en las esquinas para mayor visibilidad
         ctx.fillStyle = currentShape.color;
-        const cornerSize = Math.max(3, currentShape.strokeWidth/2 + 1);
-        ctx.fillRect(start.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
-        ctx.fillRect(end.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
-        ctx.fillRect(start.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
-        ctx.fillRect(end.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
-
-      } else if (currentShape.type === "circle" && currentShape.points.length >= 2) {
+        const cornerSize = Math.max(3, currentShape.strokeWidth / 2 + 1);
+        ctx.fillRect(
+          start.x - cornerSize / 2,
+          start.y - cornerSize / 2,
+          cornerSize,
+          cornerSize
+        );
+        ctx.fillRect(
+          end.x - cornerSize / 2,
+          start.y - cornerSize / 2,
+          cornerSize,
+          cornerSize
+        );
+        ctx.fillRect(
+          start.x - cornerSize / 2,
+          end.y - cornerSize / 2,
+          cornerSize,
+          cornerSize
+        );
+        ctx.fillRect(
+          end.x - cornerSize / 2,
+          end.y - cornerSize / 2,
+          cornerSize,
+          cornerSize
+        );
+      } else if (
+        currentShape.type === "circle" &&
+        currentShape.points.length >= 2
+      ) {
         const start = currentShape.points[0];
         const end = currentShape.points[currentShape.points.length - 1];
         const radius = Math.sqrt(
@@ -1131,10 +1317,22 @@ export default function DrawingCanvas() {
         // Dibujar punto central y punto en el perímetro para mayor visibilidad
         ctx.fillStyle = currentShape.color;
         ctx.beginPath();
-        ctx.arc(start.x, start.y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.arc(
+          start.x,
+          start.y,
+          Math.max(3, currentShape.strokeWidth / 2 + 1),
+          0,
+          2 * Math.PI
+        );
         ctx.fill();
         ctx.beginPath();
-        ctx.arc(end.x, end.y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.arc(
+          end.x,
+          end.y,
+          Math.max(3, currentShape.strokeWidth / 2 + 1),
+          0,
+          2 * Math.PI
+        );
         ctx.fill();
       }
       ctx.restore();
@@ -1195,7 +1393,7 @@ export default function DrawingCanvas() {
       // Ensure text is always rendered if it exists
       if (shape.text && shape.text.trim().length > 0) {
         // Double-check font is set properly
-        if (!ctx.font.includes('Comic Neue')) {
+        if (!ctx.font.includes("Comic Neue")) {
           ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
         }
         ctx.fillText(shape.text, shape.points[0].x, shape.points[0].y);
@@ -1223,8 +1421,10 @@ export default function DrawingCanvas() {
         const padding = 6;
         const selectionX = shape.bounds.minX - padding;
         const selectionY = shape.bounds.minY - padding;
-        const selectionWidth = shape.bounds.maxX - shape.bounds.minX + padding * 2;
-        const selectionHeight = shape.bounds.maxY - shape.bounds.minY + padding * 2;
+        const selectionWidth =
+          shape.bounds.maxX - shape.bounds.minX + padding * 2;
+        const selectionHeight =
+          shape.bounds.maxY - shape.bounds.minY + padding * 2;
 
         // Draw solid border rectangle
         ctx.strokeStyle = "#ff0000";
@@ -1240,34 +1440,46 @@ export default function DrawingCanvas() {
 
         // Top-left corner (L-shape)
         ctx.beginPath();
-        ctx.moveTo(selectionX - cornerSize/2, selectionY);
-        ctx.lineTo(selectionX + cornerSize/2, selectionY);
-        ctx.moveTo(selectionX, selectionY - cornerSize/2);
-        ctx.lineTo(selectionX, selectionY + cornerSize/2);
+        ctx.moveTo(selectionX - cornerSize / 2, selectionY);
+        ctx.lineTo(selectionX + cornerSize / 2, selectionY);
+        ctx.moveTo(selectionX, selectionY - cornerSize / 2);
+        ctx.lineTo(selectionX, selectionY + cornerSize / 2);
         ctx.stroke();
 
         // Top-right corner (L-shape)
         ctx.beginPath();
-        ctx.moveTo(selectionX + selectionWidth - cornerSize/2, selectionY);
-        ctx.lineTo(selectionX + selectionWidth + cornerSize/2, selectionY);
-        ctx.moveTo(selectionX + selectionWidth, selectionY - cornerSize/2);
-        ctx.lineTo(selectionX + selectionWidth, selectionY + cornerSize/2);
+        ctx.moveTo(selectionX + selectionWidth - cornerSize / 2, selectionY);
+        ctx.lineTo(selectionX + selectionWidth + cornerSize / 2, selectionY);
+        ctx.moveTo(selectionX + selectionWidth, selectionY - cornerSize / 2);
+        ctx.lineTo(selectionX + selectionWidth, selectionY + cornerSize / 2);
         ctx.stroke();
 
         // Bottom-left corner (L-shape)
         ctx.beginPath();
-        ctx.moveTo(selectionX - cornerSize/2, selectionY + selectionHeight);
-        ctx.lineTo(selectionX + cornerSize/2, selectionY + selectionHeight);
-        ctx.moveTo(selectionX, selectionY + selectionHeight - cornerSize/2);
-        ctx.lineTo(selectionX, selectionY + selectionHeight + cornerSize/2);
+        ctx.moveTo(selectionX - cornerSize / 2, selectionY + selectionHeight);
+        ctx.lineTo(selectionX + cornerSize / 2, selectionY + selectionHeight);
+        ctx.moveTo(selectionX, selectionY + selectionHeight - cornerSize / 2);
+        ctx.lineTo(selectionX, selectionY + selectionHeight + cornerSize / 2);
         ctx.stroke();
 
         // Bottom-right corner (L-shape)
         ctx.beginPath();
-        ctx.moveTo(selectionX + selectionWidth - cornerSize/2, selectionY + selectionHeight);
-        ctx.lineTo(selectionX + selectionWidth + cornerSize/2, selectionY + selectionHeight);
-        ctx.moveTo(selectionX + selectionWidth, selectionY + selectionHeight - cornerSize/2);
-        ctx.lineTo(selectionX + selectionWidth, selectionY + selectionHeight + cornerSize/2);
+        ctx.moveTo(
+          selectionX + selectionWidth - cornerSize / 2,
+          selectionY + selectionHeight
+        );
+        ctx.lineTo(
+          selectionX + selectionWidth + cornerSize / 2,
+          selectionY + selectionHeight
+        );
+        ctx.moveTo(
+          selectionX + selectionWidth,
+          selectionY + selectionHeight - cornerSize / 2
+        );
+        ctx.lineTo(
+          selectionX + selectionWidth,
+          selectionY + selectionHeight + cornerSize / 2
+        );
         ctx.stroke();
       } else {
         // Draw rectangular selection for other shapes with visible dotted border
@@ -1298,7 +1510,11 @@ export default function DrawingCanvas() {
         );
         ctx.setLineDash([]);
 
-        if (shape.type === "image" || shape.type === "rectangle" || shape.type === "circle") {
+        if (
+          shape.type === "image" ||
+          shape.type === "rectangle" ||
+          shape.type === "circle"
+        ) {
           const handleSize = 12;
           ctx.fillStyle = "#3b82f6";
 
@@ -1443,7 +1659,9 @@ export default function DrawingCanvas() {
     }));
   };
 
-  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>): Point => {
+  const getMousePos = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
@@ -1453,7 +1671,7 @@ export default function DrawingCanvas() {
 
     // Manejar tanto eventos de mouse como de touch
     let clientX, clientY;
-    if ('touches' in e) {
+    if ("touches" in e) {
       // Evento táctil
       const touch = e.touches[0] || { clientX: 0, clientY: 0 };
       clientX = touch.clientX;
@@ -1473,7 +1691,6 @@ export default function DrawingCanvas() {
     return { x, y };
   };
 
-  
   const handleMouseDown = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
   ) => {
@@ -1495,9 +1712,15 @@ export default function DrawingCanvas() {
       if (selectedShapeId) {
         const selectedShape = shapes.find((s) => s.id === selectedShapeId);
         if (selectedShape) {
-          const handle = getResizeHandle(point, selectedShape, 'touches' in e);
+          const handle = getResizeHandle(point, selectedShape, "touches" in e);
           if (handle) {
-            if (selectedShape.type === "text" && (handle === "text-nw" || handle === "text-ne" || handle === "text-sw" || handle === "text-se")) {
+            if (
+              selectedShape.type === "text" &&
+              (handle === "text-nw" ||
+                handle === "text-ne" ||
+                handle === "text-sw" ||
+                handle === "text-se")
+            ) {
               // Handle text resizing
               setIsResizing(true);
               setResizeHandle(handle);
@@ -1521,32 +1744,49 @@ export default function DrawingCanvas() {
               // Limpiar resizeData para imágenes
               resizeDataRef.current = null;
               return;
-            } else if ((selectedShape.type === "rectangle" || selectedShape.type === "circle" || selectedShape.type === "line") &&
-                       (handle === "nw" || handle === "ne" || handle === "sw" || handle === "se")) {
+            } else if (
+              (selectedShape.type === "rectangle" ||
+                selectedShape.type === "circle" ||
+                selectedShape.type === "line") &&
+              (handle === "nw" ||
+                handle === "ne" ||
+                handle === "sw" ||
+                handle === "se")
+            ) {
               // Handle geometric shape resizing
               setIsResizing(true);
               setResizeHandle(handle);
               setResizeStart(point);
 
               // Store original dimensions for geometric shapes
-              if (selectedShape.type === "rectangle" && selectedShape.points.length >= 2) {
+              if (
+                selectedShape.type === "rectangle" &&
+                selectedShape.points.length >= 2
+              ) {
                 const start = selectedShape.points[0];
                 const end = selectedShape.points[1];
                 setOriginalSize({
                   width: Math.abs(end.x - start.x),
                   height: Math.abs(end.y - start.y),
                 });
-              } else if (selectedShape.type === "circle" && selectedShape.points.length >= 2) {
+              } else if (
+                selectedShape.type === "circle" &&
+                selectedShape.points.length >= 2
+              ) {
                 const center = selectedShape.points[0];
                 const edge = selectedShape.points[1];
                 const radius = Math.sqrt(
-                  Math.pow(edge.x - center.x, 2) + Math.pow(edge.y - center.y, 2)
+                  Math.pow(edge.x - center.x, 2) +
+                    Math.pow(edge.y - center.y, 2)
                 );
                 setOriginalSize({
                   width: radius * 2,
                   height: radius * 2,
                 });
-              } else if (selectedShape.type === "line" && selectedShape.points.length >= 2) {
+              } else if (
+                selectedShape.type === "line" &&
+                selectedShape.points.length >= 2
+              ) {
                 const start = selectedShape.points[0];
                 const end = selectedShape.points[1];
                 setOriginalSize({
@@ -1564,7 +1804,7 @@ export default function DrawingCanvas() {
 
       const clickedShape = [...shapes]
         .reverse()
-        .find((shape) => isPointInShape(point, shape, 'touches' in e));
+        .find((shape) => isPointInShape(point, shape, "touches" in e));
       if (clickedShape) {
         setSelectedShapeId(clickedShape.id);
         setIsDragging(true);
@@ -1589,7 +1829,10 @@ export default function DrawingCanvas() {
       // Check if clicking on existing text to edit it
       const clickedShape = [...shapes]
         .reverse()
-        .find((shape) => shape.type === "text" && isPointInShape(point, shape, isTouchEvent));
+        .find(
+          (shape) =>
+            shape.type === "text" && isPointInShape(point, shape, isTouchEvent)
+        );
 
       if (clickedShape && clickedShape.text) {
         // Edit existing text
@@ -1644,8 +1887,13 @@ export default function DrawingCanvas() {
                 if (isTouchEvent && textEditor.ref.current.setSelectionRange) {
                   setTimeout(() => {
                     if (textEditor.ref.current) {
-                      const position = clickedShape?.text ? textEditor.ref.current.value.length : 0;
-                      textEditor.ref.current.setSelectionRange(position, position);
+                      const position = clickedShape?.text
+                        ? textEditor.ref.current.value.length
+                        : 0;
+                      textEditor.ref.current.setSelectionRange(
+                        position,
+                        position
+                      );
                     }
                   }, 50);
                 } else if (!isTouchEvent) {
@@ -1667,11 +1915,17 @@ export default function DrawingCanvas() {
       setIsErasing(true);
       const eraserRadius = strokeWidth * 5;
       const newShapes = shapes.filter((shape) => {
-        return !isPointInShapeForEraser(point, shape, 'touches' in e);
+        return !isPointInShapeForEraser(point, shape, "touches" in e);
       });
       if (newShapes.length !== shapes.length) {
-        const deletedShapes = shapes.filter(shape => !newShapes.includes(shape));
-        const deleteCommand = createDeleteShapesCommand(deletedShapes, addShape, removeShape);
+        const deletedShapes = shapes.filter(
+          (shape) => !newShapes.includes(shape)
+        );
+        const deleteCommand = createDeleteShapesCommand(
+          deletedShapes,
+          addShape,
+          removeShape
+        );
         saveToHistory(deleteCommand);
         deleteCommand.execute();
       }
@@ -1688,7 +1942,9 @@ export default function DrawingCanvas() {
     setCurrentShape(newShape);
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     if (isPanning && tool === "hand") {
       const clientX = "touches" in e ? e.touches[0]?.clientX : e.clientX;
       const clientY = "touches" in e ? e.touches[0]?.clientY : e.clientY;
@@ -1702,14 +1958,15 @@ export default function DrawingCanvas() {
     }
 
     // Detectar dispositivo táctil para throttling
-    if ('touches' in e) {
+    if ("touches" in e) {
       isTouchDeviceRef.current = true;
     }
 
     // Throttling para dispositivos móviles (limitar actualizaciones a ~60fps)
-    if (isTouchDeviceRef.current && 'touches' in e) {
+    if (isTouchDeviceRef.current && "touches" in e) {
       const now = Date.now();
-      if (now - lastUpdateTimeRef.current < 16) { // ~60fps
+      if (now - lastUpdateTimeRef.current < 16) {
+        // ~60fps
         return;
       }
       lastUpdateTimeRef.current = now;
@@ -1721,7 +1978,11 @@ export default function DrawingCanvas() {
     if (tool === "select" && selectedShapeId) {
       const selectedShape = shapes.find((s) => s.id === selectedShapeId);
       if (selectedShape) {
-        const handle = getResizeHandle(point, selectedShape, isTouchDeviceRef.current);
+        const handle = getResizeHandle(
+          point,
+          selectedShape,
+          isTouchDeviceRef.current
+        );
         if (handle) {
           if (handle === "text-nw" || handle === "text-se") {
             setCursorStyle("cursor-nwse-resize");
@@ -1743,7 +2004,13 @@ export default function DrawingCanvas() {
     if (isResizing && selectedShapeId && resizeHandle) {
       const shape = shapes.find((s) => s.id === selectedShapeId);
       if (shape) {
-        if (shape.type === "text" && (resizeHandle === "text-nw" || resizeHandle === "text-ne" || resizeHandle === "text-sw" || resizeHandle === "text-se")) {
+        if (
+          shape.type === "text" &&
+          (resizeHandle === "text-nw" ||
+            resizeHandle === "text-ne" ||
+            resizeHandle === "text-sw" ||
+            resizeHandle === "text-se")
+        ) {
           // Handle text resizing from any corner - use original size as base
           const deltaX = point.x - resizeStart.x;
           const deltaY = point.y - resizeStart.y;
@@ -1773,7 +2040,9 @@ export default function DrawingCanvas() {
             ...shape,
             strokeWidth: clampedTextSize / 8, // Convert back to strokeWidth format
           };
-          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          updatedShape.bounds = calculateBounds(
+            updatedShape
+          ) as Shape["bounds"];
           setDraggedShape(updatedShape);
         } else if (shape.type === "image") {
           // Handle image resizing - CORREGIDO
@@ -1866,7 +2135,7 @@ export default function DrawingCanvas() {
             resizeDataRef.current = {
               originalStart: { x: minX, y: minY },
               originalEnd: { x: maxX, y: maxY },
-              aspectRatio: (maxX - minX) / Math.max(1, maxY - minY)
+              aspectRatio: (maxX - minX) / Math.max(1, maxY - minY),
             };
           }
 
@@ -1883,23 +2152,39 @@ export default function DrawingCanvas() {
           // Redimensionar según el handle con lógica correcta
           switch (resizeHandle) {
             case "se": // Esquina inferior derecha - mover maxX, maxY
-              newMaxX = originalData.originalEnd.x + (point.x - resizeStart.x) * sensitivityFactor;
-              newMaxY = originalData.originalEnd.y + (point.y - resizeStart.y) * sensitivityFactor;
+              newMaxX =
+                originalData.originalEnd.x +
+                (point.x - resizeStart.x) * sensitivityFactor;
+              newMaxY =
+                originalData.originalEnd.y +
+                (point.y - resizeStart.y) * sensitivityFactor;
               break;
 
             case "nw": // Esquina superior izquierda - mover minX, minY
-              newMinX = originalData.originalStart.x + (point.x - resizeStart.x) * sensitivityFactor;
-              newMinY = originalData.originalStart.y + (point.y - resizeStart.y) * sensitivityFactor;
+              newMinX =
+                originalData.originalStart.x +
+                (point.x - resizeStart.x) * sensitivityFactor;
+              newMinY =
+                originalData.originalStart.y +
+                (point.y - resizeStart.y) * sensitivityFactor;
               break;
 
             case "ne": // Esquina superior derecha - mover maxX, minY
-              newMaxX = originalData.originalEnd.x + (point.x - resizeStart.x) * sensitivityFactor;
-              newMinY = originalData.originalStart.y + (point.y - resizeStart.y) * sensitivityFactor;
+              newMaxX =
+                originalData.originalEnd.x +
+                (point.x - resizeStart.x) * sensitivityFactor;
+              newMinY =
+                originalData.originalStart.y +
+                (point.y - resizeStart.y) * sensitivityFactor;
               break;
 
             case "sw": // Esquina inferior izquierda - mover minX, maxY
-              newMinX = originalData.originalStart.x + (point.x - resizeStart.x) * sensitivityFactor;
-              newMaxY = originalData.originalEnd.y + (point.y - resizeStart.y) * sensitivityFactor;
+              newMinX =
+                originalData.originalStart.x +
+                (point.x - resizeStart.x) * sensitivityFactor;
+              newMaxY =
+                originalData.originalEnd.y +
+                (point.y - resizeStart.y) * sensitivityFactor;
               break;
           }
 
@@ -1934,7 +2219,9 @@ export default function DrawingCanvas() {
             ...shape,
             points: [newStart, newEnd],
           };
-          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          updatedShape.bounds = calculateBounds(
+            updatedShape
+          ) as Shape["bounds"];
           setDraggedShape(updatedShape);
         } else if (shape.type === "circle" && shape.points.length >= 2) {
           // Handle circle resizing - CORREGIDO
@@ -1951,7 +2238,7 @@ export default function DrawingCanvas() {
             resizeDataRef.current = {
               originalStart: center,
               originalEnd: edge,
-              aspectRatio: 1 // Los círculos tienen aspect ratio 1:1
+              aspectRatio: 1, // Los círculos tienen aspect ratio 1:1
             };
           }
 
@@ -1964,9 +2251,13 @@ export default function DrawingCanvas() {
           );
 
           // Calcular el cambio en el radio
-          const radiusChange = (currentDistance - Math.sqrt(
-            Math.pow(resizeStart.x - center.x, 2) + Math.pow(resizeStart.y - center.y, 2)
-          )) * sensitivityFactor;
+          const radiusChange =
+            (currentDistance -
+              Math.sqrt(
+                Math.pow(resizeStart.x - center.x, 2) +
+                  Math.pow(resizeStart.y - center.y, 2)
+              )) *
+            sensitivityFactor;
 
           // Aplicar el cambio al radio original
           let newRadius = originalRadius + radiusChange;
@@ -1975,7 +2266,10 @@ export default function DrawingCanvas() {
           newRadius = Math.max(15, newRadius);
 
           // Calcular el ángulo original para mantener la orientación
-          const originalAngle = Math.atan2(edge.y - center.y, edge.x - center.x);
+          const originalAngle = Math.atan2(
+            edge.y - center.y,
+            edge.x - center.x
+          );
 
           // Calcular nuevo punto en el perímetro
           const newEdge = {
@@ -1987,7 +2281,9 @@ export default function DrawingCanvas() {
             ...shape,
             points: [center, newEdge],
           };
-          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          updatedShape.bounds = calculateBounds(
+            updatedShape
+          ) as Shape["bounds"];
           setDraggedShape(updatedShape);
         } else if (shape.type === "line" && shape.points.length >= 2) {
           // Handle line resizing from endpoints - CORREGIDO
@@ -2004,13 +2300,13 @@ export default function DrawingCanvas() {
             // Redimensionar desde el punto de inicio
             newStart = {
               x: start.x + (point.x - resizeStart.x) * sensitivityFactor,
-              y: start.y + (point.y - resizeStart.y) * sensitivityFactor
+              y: start.y + (point.y - resizeStart.y) * sensitivityFactor,
             };
           } else if (resizeHandle === "se") {
             // Redimensionar desde el punto final
             newEnd = {
               x: end.x + (point.x - resizeStart.x) * sensitivityFactor,
-              y: end.y + (point.y - resizeStart.y) * sensitivityFactor
+              y: end.y + (point.y - resizeStart.y) * sensitivityFactor,
             };
           }
 
@@ -2018,7 +2314,9 @@ export default function DrawingCanvas() {
             ...shape,
             points: [newStart, newEnd],
           };
-          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          updatedShape.bounds = calculateBounds(
+            updatedShape
+          ) as Shape["bounds"];
           setDraggedShape(updatedShape);
         }
       }
@@ -2069,7 +2367,10 @@ export default function DrawingCanvas() {
       // Para formas geométricas, actualizar más eficientemente
       const startPoint = currentShape.points[0];
       // Solo actualizar si el punto realmente cambió significativamente
-      if (Math.abs(point.x - startPoint.x) > 1 || Math.abs(point.y - startPoint.y) > 1) {
+      if (
+        Math.abs(point.x - startPoint.x) > 1 ||
+        Math.abs(point.y - startPoint.y) > 1
+      ) {
         setCurrentShape({
           ...currentShape,
           points: [startPoint, point],
@@ -2091,7 +2392,7 @@ export default function DrawingCanvas() {
     }
 
     if (isResizing && selectedShapeId && draggedShape) {
-      const originalShape = shapes.find(s => s.id === selectedShapeId);
+      const originalShape = shapes.find((s) => s.id === selectedShapeId);
       if (originalShape) {
         // Check if it's text resizing
         if (originalShape.type === "text" && draggedShape.type === "text") {
@@ -2129,7 +2430,7 @@ export default function DrawingCanvas() {
     }
 
     if (isDragging && selectedShapeId && draggedShape) {
-      const originalShape = shapes.find(s => s.id === selectedShapeId);
+      const originalShape = shapes.find((s) => s.id === selectedShapeId);
       if (originalShape) {
         const moveCommand = createMoveShapeCommand(
           selectedShapeId,
@@ -2153,7 +2454,11 @@ export default function DrawingCanvas() {
         ...currentShape,
         bounds: calculateBounds(currentShape),
       };
-      const addCommand = createAddShapeCommand(shapeWithBounds as Shape, addShape, removeShape);
+      const addCommand = createAddShapeCommand(
+        shapeWithBounds as Shape,
+        addShape,
+        removeShape
+      );
       saveToHistory(addCommand);
       addCommand.execute();
       setCurrentShape(null);
@@ -2172,10 +2477,11 @@ export default function DrawingCanvas() {
       const canvas = canvasRef.current;
 
       // Check if we're editing existing text
-      const existingTextShape = shapes.find(shape =>
-        shape.type === "text" &&
-        shape.points[0].x === textPosition.x &&
-        shape.points[0].y === textPosition.y
+      const existingTextShape = shapes.find(
+        (shape) =>
+          shape.type === "text" &&
+          shape.points[0].x === textPosition.x &&
+          shape.points[0].y === textPosition.y
       );
 
       // Calculate bounds with proper text measurement
@@ -2231,7 +2537,11 @@ export default function DrawingCanvas() {
           text: textValue,
           bounds,
         };
-        const addCommand = createAddShapeCommand(newShape, addShape, removeShape);
+        const addCommand = createAddShapeCommand(
+          newShape,
+          addShape,
+          removeShape
+        );
         saveToHistory(addCommand);
         addCommand.execute();
       }
@@ -2297,7 +2607,11 @@ export default function DrawingCanvas() {
   const handleClear = () => {
     // Save the current state to history
     if (shapes.length > 0) {
-      const deleteCommand = createDeleteShapesCommand(shapes, addShape, removeShape);
+      const deleteCommand = createDeleteShapesCommand(
+        shapes,
+        addShape,
+        removeShape
+      );
       saveToHistory(deleteCommand);
       deleteCommand.execute();
     }
@@ -2368,7 +2682,11 @@ export default function DrawingCanvas() {
           },
         };
 
-        const addCommand = createAddShapeCommand(newShape, addShape, removeShape);
+        const addCommand = createAddShapeCommand(
+          newShape,
+          addShape,
+          removeShape
+        );
         saveToHistory(addCommand);
         addCommand.execute();
         setTool("select");
@@ -2465,14 +2783,13 @@ export default function DrawingCanvas() {
 
           {/* Center section - App Name (sin bloque) */}
           <div className="flex flex-1 items-center justify-center">
-            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-            </span>
+            <span className="text-sm font-medium text-slate-900 dark:text-slate-100"></span>
           </div>
 
           {/* Right section - Actions con nombre de proyecto */}
           <div className="flex h-full items-center gap-2 border-l px-2 md:rounded-lg md:border md:border-slate-200 md:px-3 dark:md:border-slate-800">
-            {/* Project Title - Desktop only */}
-            <div className="hidden items-center gap-2 md:flex">
+            {/* Project Title - Visible en todos los dispositivos */}
+            <div className="flex items-center gap-2">
               {isEditingTitle ? (
                 <input
                   ref={titleInputRef}
@@ -2487,19 +2804,20 @@ export default function DrawingCanvas() {
                       setProjectTitle(projectTitle || "Untitled Project");
                     }
                   }}
-                  className="border-b border-slate-900 bg-transparent px-2 text-sm text-slate-900 outline-none dark:border-slate-100 dark:text-slate-100"
+                  className="border-b border-slate-900 bg-transparent px-1.5 text-xs sm:px-2 sm:text-sm text-slate-900 outline-none dark:border-slate-100 dark:text-slate-100 w-20 sm:w-auto md:w-auto"
                   style={{
-                    width: `${Math.max(projectTitle.length * 8, 100)}px`,
+                    width: `${Math.max(projectTitle.length * 6, 80)}px`,
                   }}
+                  placeholder="Proyecto..."
                 />
               ) : (
                 <button
-                  className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-100"
+                  className="flex items-center gap-1 sm:gap-1.5 text-xs sm:text-sm text-slate-500 hover:text-slate-900 dark:text-slate-500 dark:hover:text-slate-100 truncate max-w-[100px] sm:max-w-none"
                   onClick={handleTitleClick}
                   title="Click para editar el nombre del proyecto"
                 >
                   <svg
-                    className="h-3.5 w-3.5"
+                    className="h-3 w-3 sm:h-3.5 sm:w-3.5 flex-shrink-0"
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -2511,10 +2829,11 @@ export default function DrawingCanvas() {
                       d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                     />
                   </svg>
-                  {projectTitle}
+                  <span className="hidden sm:inline">{projectTitle}</span>
+                  <span className="sm:hidden truncate">{projectTitle}</span>
                 </button>
               )}
-              <div className="h-6 w-px bg-slate-200 dark:bg-slate-800" />
+              <div className="hidden h-6 w-px bg-slate-200 dark:bg-slate-800 sm:block" />
             </div>
 
             {/* Export - Desktop only */}
@@ -2922,14 +3241,6 @@ export default function DrawingCanvas() {
             >
               <Download className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
-            {/* <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-lg sm:h-10 sm:w-10"
-              title="Más opciones"
-            >
-              <MoreHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button> */}
           </div>
         </div>
 
@@ -3000,7 +3311,7 @@ export default function DrawingCanvas() {
         </div>
 
         {/* History controls - Mobile bottom */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
+        <div className="absolute top-18 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -3024,7 +3335,7 @@ export default function DrawingCanvas() {
         </div>
 
         {/* Zoom controls - Bottom on all screens */}
-        <div className="absolute bottom-4 right-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
+        <div className="absolute top-4 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:top-auto sm:bottom-6 sm:left-auto sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
           <Button
             variant="ghost"
             size="icon"
