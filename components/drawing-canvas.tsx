@@ -40,20 +40,41 @@ function useTextEditor(params: {
   const { screenPosition, fontSize, color, viewport, active } = params;
   const ref = useRef<HTMLTextAreaElement>(null);
 
-  const minWidth = 120;
-  const minHeight = fontSize + 8;
+  const minWidth = 100;
+  const minHeight = fontSize + 12;
+  const padding = 8;
 
   // Desired absolute position over the canvas (baseline -> top conversion)
-  const left = Math.max(0, screenPosition.x);
-  const top = Math.max(0, screenPosition.y - fontSize);
+  // Ensure text editor stays within reasonable bounds
+  const left = Math.max(padding, Math.min(screenPosition.x, viewport.width - 100));
+  const top = Math.max(padding, Math.min(screenPosition.y - fontSize - 4, viewport.height - 50));
 
-  // Hide if any edge would overflow the viewport (behavior requested)
+  // Hide only if completely outside viewport with generous tolerance
+  const tolerance = 150; // Allow 150px tolerance outside viewport
+  // Use safe fallback values for SSR
+  const getSafeViewportWidth = () => {
+    if (typeof window !== 'undefined') {
+      return viewport.width || window.innerWidth || 1000;
+    }
+    return viewport.width || 1000;
+  };
+
+  const getSafeViewportHeight = () => {
+    if (typeof window !== 'undefined') {
+      return viewport.height || window.innerHeight || 800;
+    }
+    return viewport.height || 800;
+  };
+
+  const viewportWidth = getSafeViewportWidth();
+  const viewportHeight = getSafeViewportHeight();
+
   const hidden =
     !active ||
-    left < 0 ||
-    top < 0 ||
-    left + minWidth > (viewport.width || 0) ||
-    top + minHeight > (viewport.height || 0);
+    left + minWidth < -tolerance ||
+    top + minHeight < -tolerance ||
+    left > viewportWidth + tolerance ||
+    top > viewportHeight + tolerance;
 
   const style: React.CSSProperties = {
     position: "absolute",
@@ -61,15 +82,27 @@ function useTextEditor(params: {
     top: `${top}px`,
     fontSize: `${fontSize}px`,
     color,
-    minWidth: `${minWidth}px`,
-    minHeight: `${minHeight}px`,
-    maxWidth: "90%",
-    maxHeight: `${Math.max(50, (viewport.height || 0) - 16)}px`,
+    minWidth: "20px",
+    minHeight: `${fontSize}px`,
+    maxWidth: "500px",
+    maxHeight: `${Math.max(40, (viewport.height || 0) - 32)}px`,
     overflow: "auto",
-    lineHeight: 1.2,
+    lineHeight: 1.4,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
+    padding: "0",
+    border: "none",
+    borderRadius: "0",
+    backgroundColor: "transparent",
+    boxShadow: "none",
+    outline: "none",
+    resize: "none",
+    fontFamily: "'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+    fontWeight: "400",
     display: hidden ? "none" : undefined,
+    zIndex: 1000,
+    textAlign: "left",
+      caretColor: "#3b82f6",
   };
 
   return { ref, style, hidden } as const;
@@ -109,7 +142,124 @@ interface Shape {
   };
 }
 
-type ResizeHandle = "nw" | "ne" | "sw" | "se" | null;
+type ResizeHandle = "nw" | "ne" | "sw" | "se" | "text-nw" | "text-ne" | "text-sw" | "text-se" | null;
+
+// Command Pattern interfaces for undo/redo system
+interface Command {
+  execute(): void;
+  undo(): void;
+  getDescription(): string;
+}
+
+interface AddShapeCommand extends Command {
+  type: "addShape";
+  shape: Shape;
+}
+
+interface DeleteShapesCommand extends Command {
+  type: "deleteShapes";
+  shapes: Shape[];
+}
+
+interface MoveShapeCommand extends Command {
+  type: "moveShape";
+  shapeId: string;
+  oldPoints: Point[];
+  newPoints: Point[];
+  oldImageWidth?: number;
+  oldImageHeight?: number;
+  newImageWidth?: number;
+  newImageHeight?: number;
+}
+
+interface ModifyShapeCommand extends Command {
+  type: "modifyShape";
+  shapeId: string;
+  oldShape: Shape;
+  newShape: Shape;
+}
+
+type HistoryCommand = AddShapeCommand | DeleteShapesCommand | MoveShapeCommand | ModifyShapeCommand;
+
+// Command factory functions
+const createAddShapeCommand = (shape: Shape, addShape: (shape: Shape) => void, removeShape: (shapeId: string) => void): AddShapeCommand => ({
+  type: "addShape",
+  shape,
+  execute() {
+    addShape(shape);
+  },
+  undo() {
+    removeShape(shape.id);
+  },
+  getDescription() {
+    return `Agregar ${shape.type}`;
+  }
+});
+
+const createDeleteShapesCommand = (shapes: Shape[], addShape: (shape: Shape) => void, removeShape: (shapeId: string) => void): DeleteShapesCommand => ({
+  type: "deleteShapes",
+  shapes,
+  execute() {
+    shapes.forEach(shape => removeShape(shape.id));
+  },
+  undo() {
+    shapes.forEach(shape => addShape(shape));
+  },
+  getDescription() {
+    const shapeTypes = shapes.map(s => s.type).join(", ");
+    return `Eliminar ${shapeTypes}`;
+  }
+});
+
+const createMoveShapeCommand = (
+  shapeId: string,
+  oldPoints: Point[],
+  newPoints: Point[],
+  oldImageWidth: number | undefined,
+  oldImageHeight: number | undefined,
+  newImageWidth: number | undefined,
+  newImageHeight: number | undefined,
+  updateShape: (shapeId: string, points: Point[], imageWidth?: number, imageHeight?: number) => void
+): MoveShapeCommand => ({
+  type: "moveShape",
+  shapeId,
+  oldPoints,
+  newPoints,
+  oldImageWidth,
+  oldImageHeight,
+  newImageWidth,
+  newImageHeight,
+  execute() {
+    updateShape(shapeId, newPoints, newImageWidth, newImageHeight);
+  },
+  undo() {
+    updateShape(shapeId, oldPoints, oldImageWidth, oldImageHeight);
+  },
+  getDescription() {
+    return `Mover figura`;
+  }
+});
+
+const createModifyShapeCommand = (
+  shapeId: string,
+  oldShape: Shape,
+  newShape: Shape,
+  updateShapeFully: (shapeId: string, newShape: Shape) => void
+): ModifyShapeCommand => ({
+  type: "modifyShape",
+  shapeId,
+  oldShape,
+  newShape,
+  execute() {
+    updateShapeFully(shapeId, newShape);
+  },
+  undo() {
+    updateShapeFully(shapeId, oldShape);
+  },
+  getDescription() {
+    return `Modificar ${newShape.type}`;
+  }
+});
 
 export default function DrawingCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -140,6 +290,7 @@ export default function DrawingCanvas() {
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
   const [color, setColor] = useState("#1e293b");
   const [strokeWidth, setStrokeWidth] = useState(2);
+  const [textSize, setTextSize] = useState(20); // Tamaño de fuente específico para texto
   const [zoom, setZoom] = useState(100);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
 
@@ -204,9 +355,55 @@ export default function DrawingCanvas() {
   const [dragStart, setDragStart] = useState<Point>({ x: 0, y: 0 });
   const [shapeStartPoints, setShapeStartPoints] = useState<Point[]>([]);
   const [draggedShape, setDraggedShape] = useState<Shape | null>(null);
-  const [history, setHistory] = useState<Shape[][]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
+  const [commands, setCommands] = useState<HistoryCommand[]>([]);
+  const [commandIndex, setCommandIndex] = useState(-1);
+  const MAX_COMMANDS = 100; // Límite de comandos para manejar memoria
+
+  // Helper functions for shape manipulation
+  const addShape = (shape: Shape) => {
+    setShapes(prev => [...prev, shape]);
+  };
+
+  const removeShape = (shapeId: string) => {
+    setShapes(prev => prev.filter(shape => shape.id !== shapeId));
+  };
+
+  const updateShape = (shapeId: string, points: Point[], imageWidth?: number, imageHeight?: number) => {
+    setShapes(prev => prev.map(shape => {
+      if (shape.id === shapeId) {
+        const updatedShape = { ...shape, points };
+        if (imageWidth !== undefined) updatedShape.imageWidth = imageWidth;
+        if (imageHeight !== undefined) updatedShape.imageHeight = imageHeight;
+        updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+        return updatedShape;
+      }
+      return shape;
+    }));
+  };
+
+  const updateShapeFully = (shapeId: string, newShape: Shape) => {
+    setShapes(prev => prev.map(shape =>
+      shape.id === shapeId ? { ...newShape, id: shapeId } : shape
+    ));
+  };
+
+  // New saveToHistory function for commands
+  const saveToHistory = (command: HistoryCommand) => {
+    setCommands(prev => {
+      // Eliminar comandos futuros si estamos en medio del historial
+      const newCommands = prev.slice(0, commandIndex + 1);
+      // Agregar el nuevo comando
+      newCommands.push(command);
+      // Mantener solo los últimos MAX_COMMANDS
+      if (newCommands.length > MAX_COMMANDS) {
+        return newCommands.slice(-MAX_COMMANDS);
+      }
+      return newCommands;
+    });
+    setCommandIndex(prev => Math.min(prev + 1, MAX_COMMANDS - 1));
+  };
   const [isErasing, setIsErasing] = useState(false);
+  const [cursorStyle, setCursorStyle] = useState<string>("cursor-default");
 
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<ResizeHandle>(null);
@@ -290,19 +487,28 @@ export default function DrawingCanvas() {
       if (canvas) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          const baseFontSize = shape.strokeWidth * 8;
-          const fontSize = getFontSize(baseFontSize);
-          ctx.font = `${fontSize}px 'Comic Sans MS', cursive, sans-serif`;
+          const fontSize = Math.max(12, getFontSize(shape.strokeWidth * 8));
+          ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
           const metrics = ctx.measureText(shape.text);
           const textHeight = fontSize;
+          const padding = Math.max(10, fontSize / 2); // Increased padding for better selection area
           return {
-            minX: shape.points[0].x,
-            minY: shape.points[0].y - textHeight,
-            maxX: shape.points[0].x + metrics.width,
-            maxY: shape.points[0].y,
+            minX: shape.points[0].x - padding,
+            minY: shape.points[0].y - textHeight - padding,
+            maxX: shape.points[0].x + Math.max(metrics.width, 20) + padding, // Minimum width for selection
+            maxY: shape.points[0].y + padding,
           };
         }
       }
+      // Fallback bounds if canvas context is not available
+      const fallbackSize = Math.max(12, shape.strokeWidth * 8);
+      const fallbackPadding = 8;
+      return {
+        minX: shape.points[0].x - fallbackPadding,
+        minY: shape.points[0].y - fallbackSize - fallbackPadding,
+        maxX: shape.points[0].x + Math.max(shape.text.length * fallbackSize * 0.6, 50) + fallbackPadding,
+        maxY: shape.points[0].y + fallbackPadding,
+      };
     }
 
     if (shape.type === "image" && shape.imageWidth && shape.imageHeight) {
@@ -356,16 +562,142 @@ export default function DrawingCanvas() {
     if (!bounds) return false;
 
     const padding = 10;
-    return (
-      point.x >= bounds.minX - padding &&
-      point.x <= bounds.maxX + padding &&
-      point.y >= bounds.minY - padding &&
-      point.y <= bounds.maxY + padding
-    );
+
+    // Para texto, imagen y pencil, usar el bounding box completo
+    if (shape.type === "text" || shape.type === "image" || shape.type === "pencil") {
+      return (
+        point.x >= bounds.minX - padding &&
+        point.x <= bounds.maxX + padding &&
+        point.y >= bounds.minY - padding &&
+        point.y <= bounds.maxY + padding
+      );
+    }
+
+    // Para líneas, verificar si el punto está cerca de la línea
+    if (shape.type === "line" && shape.points.length >= 2) {
+      const start = shape.points[0];
+      const end = shape.points[shape.points.length - 1];
+      return isPointNearLine(point, start, end, padding);
+    }
+
+    // Para rectángulos, verificar si el punto está cerca de los bordes
+    if (shape.type === "rectangle" && shape.points.length >= 2) {
+      const start = shape.points[0];
+      const end = shape.points[shape.points.length - 1];
+      // Bordes del rectángulo
+      const topLeft = { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y) };
+      const bottomRight = { x: Math.max(start.x, end.x), y: Math.max(start.y, end.y) };
+      const topRight = { x: bottomRight.x, y: topLeft.y };
+      const bottomLeft = { x: topLeft.x, y: bottomRight.y };
+
+      // Verificar si está cerca de cualquier borde
+      return (
+        isPointNearLine(point, topLeft, topRight, padding) || // Borde superior
+        isPointNearLine(point, topRight, bottomRight, padding) || // Borde derecho
+        isPointNearLine(point, bottomRight, bottomLeft, padding) || // Borde inferior
+        isPointNearLine(point, bottomLeft, topLeft, padding) // Borde izquierdo
+      );
+    }
+
+    // Para círculos, verificar si el punto está cerca del perímetro
+    if (shape.type === "circle" && shape.points.length >= 2) {
+      const center = shape.points[0];
+      const edgePoint = shape.points[shape.points.length - 1];
+      const radius = Math.sqrt(
+        Math.pow(edgePoint.x - center.x, 2) + Math.pow(edgePoint.y - center.y, 2)
+      );
+      const distance = Math.sqrt(
+        Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
+      );
+      // Verificar si el punto está cerca del perímetro del círculo
+      return Math.abs(distance - radius) <= padding;
+    }
+
+    return false;
+  };
+
+  // Helper function to check if a point is near a line segment
+  const isPointNearLine = (point: Point, start: Point, end: Point, threshold: number): boolean => {
+    // Calcular la distancia del punto a la línea
+    const A = point.x - start.x;
+    const B = point.y - start.y;
+    const C = end.x - start.x;
+    const D = end.y - start.y;
+
+    const dot = A * C + B * D;
+    const lenSq = C * C + D * D;
+    let param = -1;
+
+    if (lenSq !== 0) {
+      param = dot / lenSq;
+    }
+
+    let xx, yy;
+
+    if (param < 0) {
+      xx = start.x;
+      yy = start.y;
+    } else if (param > 1) {
+      xx = end.x;
+      yy = end.y;
+    } else {
+      xx = start.x + param * C;
+      yy = start.y + param * D;
+    }
+
+    const dx = point.x - xx;
+    const dy = point.y - yy;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+
+    return distance <= threshold;
   };
 
   // Get the resize handle of the shape
   const getResizeHandle = (point: Point, shape: Shape): ResizeHandle => {
+    if (shape.type === "text" && shape.bounds) {
+      // Check for text resize handles at all four corners
+      const padding = 8;
+      const selectionX = shape.bounds.minX - padding;
+      const selectionY = shape.bounds.minY - padding;
+      const selectionWidth = shape.bounds.maxX - shape.bounds.minX + padding * 2;
+      const selectionHeight = shape.bounds.maxY - shape.bounds.minY + padding * 2;
+      const handleSize = 8;
+
+      // Top-left corner handle
+      if (
+        Math.abs(point.x - selectionX) < handleSize / 2 &&
+        Math.abs(point.y - selectionY) < handleSize / 2
+      ) {
+        return "text-nw";
+      }
+
+      // Top-right corner handle
+      if (
+        Math.abs(point.x - (selectionX + selectionWidth)) < handleSize / 2 &&
+        Math.abs(point.y - selectionY) < handleSize / 2
+      ) {
+        return "text-ne";
+      }
+
+      // Bottom-left corner handle
+      if (
+        Math.abs(point.x - selectionX) < handleSize / 2 &&
+        Math.abs(point.y - (selectionY + selectionHeight)) < handleSize / 2
+      ) {
+        return "text-sw";
+      }
+
+      // Bottom-right corner handle
+      if (
+        Math.abs(point.x - (selectionX + selectionWidth)) < handleSize / 2 &&
+        Math.abs(point.y - (selectionY + selectionHeight)) < handleSize / 2
+      ) {
+        return "text-se";
+      }
+
+      return null;
+    }
+
     if (shape.type !== "image" || !shape.bounds) return null;
 
     const handleSize = 8;
@@ -434,14 +766,10 @@ export default function DrawingCanvas() {
       drawShape(ctx, draggedShape, true);
     }
 
-    // IMPORTANTE: Dibujar currentShape SOLO si NO es pencil y está dibujando
-    // Los pencil strokes van SOLO en el preview canvas
-    if (currentShape && currentShape.type !== "pencil" && isDrawing) {
-      drawShape(ctx, currentShape, false);
-    }
+    // NO dibujar currentShape aquí - se maneja en el preview canvas
+    // Esto mantiene la separación clara entre contenido comprometido y transitorio
   };
 
-  // Redraw only the preview (transient) content
   // Redraw only the preview (transient) content
   const redrawPreview = () => {
     const canvas = previewCanvasRef.current;
@@ -454,8 +782,8 @@ export default function DrawingCanvas() {
     ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Solo dibujar si hay un currentShape de tipo pencil Y está dibujando activamente
-    if (!currentShape || currentShape.type !== "pencil" || !isDrawing) {
+    // Solo dibujar si hay un currentShape Y está dibujando activamente
+    if (!currentShape || !isDrawing) {
       return;
     }
 
@@ -468,14 +796,8 @@ export default function DrawingCanvas() {
     ctx.scale(scale, scale);
     ctx.translate(-offsetX, -offsetY);
 
-    // Dibujar el trazo de pencil en progreso
-    drawPencilStylized(
-      ctx,
-      currentShape.points,
-      currentShape.color,
-      currentShape.strokeWidth,
-      Math.max(0, Math.min(1, roughness))
-    );
+    // Dibujar la forma actual en progreso (cualquier tipo)
+    drawShape(ctx, currentShape, false);
   };
 
   // Draw the shape on the canvas
@@ -522,11 +844,19 @@ export default function DrawingCanvas() {
       ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
       ctx.stroke();
     } else if (shape.type === "text" && shape.text) {
-      const baseFontSize = shape.strokeWidth * 8;
-      const fontSize = getFontSize(baseFontSize);
-      ctx.font = `${fontSize}px 'Comic Sans MS', cursive, sans-serif`;
+      const fontSize = Math.max(12, getFontSize(shape.strokeWidth * 8)); // Ensure minimum readable font size
+      ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
       ctx.fillStyle = shape.color;
-      ctx.fillText(shape.text, shape.points[0].x, shape.points[0].y);
+      ctx.textBaseline = "alphabetic";
+      ctx.textAlign = "left";
+      // Ensure text is always rendered if it exists
+      if (shape.text && shape.text.trim().length > 0) {
+        // Double-check font is set properly
+        if (!ctx.font.includes('Comic Neue')) {
+          ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+        }
+        ctx.fillText(shape.text, shape.points[0].x, shape.points[0].y);
+      }
     } else if (
       shape.type === "image" &&
       shape.imageWidth &&
@@ -545,47 +875,101 @@ export default function DrawingCanvas() {
     }
 
     if (isSelected && shape.bounds) {
-      ctx.strokeStyle = "#3b82f6";
-      ctx.lineWidth = 2;
-      ctx.setLineDash([5, 5]);
-      const padding = 5;
-      ctx.strokeRect(
-        shape.bounds.minX - padding,
-        shape.bounds.minY - padding,
-        shape.bounds.maxX - shape.bounds.minX + padding * 2,
-        shape.bounds.maxY - shape.bounds.minY + padding * 2
-      );
-      ctx.setLineDash([]);
+      if (shape.type === "text") {
+        // Draw rectangular selection that completely surrounds the text
+        const padding = 6;
+        const selectionX = shape.bounds.minX - padding;
+        const selectionY = shape.bounds.minY - padding;
+        const selectionWidth = shape.bounds.maxX - shape.bounds.minX + padding * 2;
+        const selectionHeight = shape.bounds.maxY - shape.bounds.minY + padding * 2;
 
-      if (shape.type === "image") {
-        const handleSize = 12;
-        ctx.fillStyle = "#3b82f6";
+        // Draw solid border rectangle
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+        ctx.strokeRect(selectionX, selectionY, selectionWidth, selectionHeight);
 
-        // Draw corner handles
-        ctx.fillRect(
-          shape.bounds.minX - handleSize / 2,
-          shape.bounds.minY - handleSize / 2,
-          handleSize,
-          handleSize
+        // Draw corner resize indicators (small L-shaped lines)
+        const cornerSize = 8;
+        const cornerLineWidth = 2;
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = cornerLineWidth;
+
+        // Top-left corner (L-shape)
+        ctx.beginPath();
+        ctx.moveTo(selectionX - cornerSize/2, selectionY);
+        ctx.lineTo(selectionX + cornerSize/2, selectionY);
+        ctx.moveTo(selectionX, selectionY - cornerSize/2);
+        ctx.lineTo(selectionX, selectionY + cornerSize/2);
+        ctx.stroke();
+
+        // Top-right corner (L-shape)
+        ctx.beginPath();
+        ctx.moveTo(selectionX + selectionWidth - cornerSize/2, selectionY);
+        ctx.lineTo(selectionX + selectionWidth + cornerSize/2, selectionY);
+        ctx.moveTo(selectionX + selectionWidth, selectionY - cornerSize/2);
+        ctx.lineTo(selectionX + selectionWidth, selectionY + cornerSize/2);
+        ctx.stroke();
+
+        // Bottom-left corner (L-shape)
+        ctx.beginPath();
+        ctx.moveTo(selectionX - cornerSize/2, selectionY + selectionHeight);
+        ctx.lineTo(selectionX + cornerSize/2, selectionY + selectionHeight);
+        ctx.moveTo(selectionX, selectionY + selectionHeight - cornerSize/2);
+        ctx.lineTo(selectionX, selectionY + selectionHeight + cornerSize/2);
+        ctx.stroke();
+
+        // Bottom-right corner (L-shape)
+        ctx.beginPath();
+        ctx.moveTo(selectionX + selectionWidth - cornerSize/2, selectionY + selectionHeight);
+        ctx.lineTo(selectionX + selectionWidth + cornerSize/2, selectionY + selectionHeight);
+        ctx.moveTo(selectionX + selectionWidth, selectionY + selectionHeight - cornerSize/2);
+        ctx.lineTo(selectionX + selectionWidth, selectionY + selectionHeight + cornerSize/2);
+        ctx.stroke();
+      } else {
+        // Draw rectangular selection for other shapes
+        ctx.strokeStyle = "#3b82f6";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 5]);
+        const padding = 5;
+        ctx.strokeRect(
+          shape.bounds.minX - padding,
+          shape.bounds.minY - padding,
+          shape.bounds.maxX - shape.bounds.minX + padding * 2,
+          shape.bounds.maxY - shape.bounds.minY + padding * 2
         );
-        ctx.fillRect(
-          shape.bounds.maxX - handleSize / 2,
-          shape.bounds.minY - handleSize / 2,
-          handleSize,
-          handleSize
-        );
-        ctx.fillRect(
-          shape.bounds.minX - handleSize / 2,
-          shape.bounds.maxY - handleSize / 2,
-          handleSize,
-          handleSize
-        );
-        ctx.fillRect(
-          shape.bounds.maxX - handleSize / 2,
-          shape.bounds.maxY - handleSize / 2,
-          handleSize,
-          handleSize
-        );
+        ctx.setLineDash([]);
+
+        if (shape.type === "image") {
+          const handleSize = 12;
+          ctx.fillStyle = "#3b82f6";
+
+          // Draw corner handles
+          ctx.fillRect(
+            shape.bounds.minX - handleSize / 2,
+            shape.bounds.minY - handleSize / 2,
+            handleSize,
+            handleSize
+          );
+          ctx.fillRect(
+            shape.bounds.maxX - handleSize / 2,
+            shape.bounds.minY - handleSize / 2,
+            handleSize,
+            handleSize
+          );
+          ctx.fillRect(
+            shape.bounds.minX - handleSize / 2,
+            shape.bounds.maxY - handleSize / 2,
+            handleSize,
+            handleSize
+          );
+          ctx.fillRect(
+            shape.bounds.maxX - handleSize / 2,
+            shape.bounds.maxY - handleSize / 2,
+            handleSize,
+            handleSize
+          );
+        }
       }
     }
   };
@@ -668,13 +1052,7 @@ export default function DrawingCanvas() {
     return { x, y };
   };
 
-  const saveToHistory = () => {
-    const newHistory = history.slice(0, historyIndex + 1);
-    newHistory.push([...shapes]);
-    setHistory(newHistory);
-    setHistoryIndex(newHistory.length - 1);
-  };
-
+  
   const handleMouseDown = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
   ) => {
@@ -702,17 +1080,30 @@ export default function DrawingCanvas() {
     if (tool === "select") {
       if (selectedShapeId) {
         const selectedShape = shapes.find((s) => s.id === selectedShapeId);
-        if (selectedShape && selectedShape.type === "image") {
+        if (selectedShape) {
           const handle = getResizeHandle(point, selectedShape);
           if (handle) {
-            setIsResizing(true);
-            setResizeHandle(handle);
-            setResizeStart(point);
-            setOriginalSize({
-              width: selectedShape.imageWidth || 0,
-              height: selectedShape.imageHeight || 0,
-            });
-            return;
+            if (selectedShape.type === "text" && (handle === "text-nw" || handle === "text-ne" || handle === "text-sw" || handle === "text-se")) {
+              // Handle text resizing
+              setIsResizing(true);
+              setResizeHandle(handle);
+              setResizeStart(point);
+              setOriginalSize({
+                width: selectedShape.strokeWidth * 8, // Convert to text size
+                height: selectedShape.strokeWidth * 8,
+              });
+              return;
+            } else if (selectedShape.type === "image") {
+              // Handle image resizing
+              setIsResizing(true);
+              setResizeHandle(handle);
+              setResizeStart(point);
+              setOriginalSize({
+                width: selectedShape.imageWidth || 0,
+                height: selectedShape.imageHeight || 0,
+              });
+              return;
+            }
           }
         }
       }
@@ -734,9 +1125,28 @@ export default function DrawingCanvas() {
     if (tool === "text") {
       // Prevent default to avoid any interference
       e.preventDefault();
-      setIsEditingText(true);
-      setTextPosition(point);
-      setTextValue("");
+
+      // Check if clicking on existing text to edit it
+      const clickedShape = [...shapes]
+        .reverse()
+        .find((shape) => shape.type === "text" && isPointInShape(point, shape));
+
+      if (clickedShape && clickedShape.text) {
+        // Edit existing text
+        setIsEditingText(true);
+        setTextPosition(clickedShape.points[0]);
+        setTextValue(clickedShape.text);
+        // Set text size from existing text
+        if (clickedShape.strokeWidth) {
+          setTextSize(clickedShape.strokeWidth * 8);
+        }
+      } else {
+        // Create new text
+        setIsEditingText(true);
+        setTextPosition(point);
+        setTextValue("");
+      }
+
       // Calculate screen position directly from event for accurate placement
       const canvas = canvasRef.current;
       if (canvas) {
@@ -770,11 +1180,12 @@ export default function DrawingCanvas() {
                 // Focus the input
                 textEditor.ref.current.focus();
 
-                // On mobile, just position cursor at start
+                // On mobile, position cursor at end for existing text, start for new
                 if (isTouchEvent && textEditor.ref.current.setSelectionRange) {
                   setTimeout(() => {
                     if (textEditor.ref.current) {
-                      textEditor.ref.current.setSelectionRange(0, 0);
+                      const position = clickedShape?.text ? textEditor.ref.current.value.length : 0;
+                      textEditor.ref.current.setSelectionRange(position, position);
                     }
                   }, 50);
                 } else if (!isTouchEvent) {
@@ -799,8 +1210,10 @@ export default function DrawingCanvas() {
         return !isPointInShape(point, shape);
       });
       if (newShapes.length !== shapes.length) {
-        saveToHistory();
-        setShapes(newShapes);
+        const deletedShapes = shapes.filter(shape => !newShapes.includes(shape));
+        const deleteCommand = createDeleteShapesCommand(deletedShapes, addShape, removeShape);
+        saveToHistory(deleteCommand);
+        deleteCommand.execute();
       }
       return;
     }
@@ -826,50 +1239,108 @@ export default function DrawingCanvas() {
 
     const point = getMousePos(e);
 
+    // Update cursor based on what we're hovering over
+    if (tool === "select" && selectedShapeId) {
+      const selectedShape = shapes.find((s) => s.id === selectedShapeId);
+      if (selectedShape) {
+        const handle = getResizeHandle(point, selectedShape);
+        if (handle) {
+          if (handle === "text-nw" || handle === "text-se") {
+            setCursorStyle("cursor-nwse-resize");
+          } else if (handle === "text-ne" || handle === "text-sw") {
+            setCursorStyle("cursor-nesw-resize");
+          } else {
+            setCursorStyle("cursor-nwse-resize");
+          }
+        } else {
+          setCursorStyle("cursor-move");
+        }
+      } else {
+        setCursorStyle("cursor-default");
+      }
+    } else {
+      setCursorStyle("cursor-default");
+    }
+
     if (isResizing && selectedShapeId && resizeHandle) {
       const shape = shapes.find((s) => s.id === selectedShapeId);
-      if (shape && shape.type === "image") {
-        const deltaX = point.x - resizeStart.x;
-        const deltaY = point.y - resizeStart.y;
+      if (shape) {
+        if (shape.type === "text" && (resizeHandle === "text-nw" || resizeHandle === "text-ne" || resizeHandle === "text-sw" || resizeHandle === "text-se")) {
+          // Handle text resizing from any corner - use original size as base
+          const deltaX = point.x - resizeStart.x;
+          const deltaY = point.y - resizeStart.y;
 
-        let newWidth = originalSize.width;
-        let newHeight = originalSize.height;
-        let newX = shape.points[0].x;
-        let newY = shape.points[0].y;
+          // Calculate distance from start point
+          const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
 
-        const aspectRatio = originalSize.width / originalSize.height;
+          // Determine if we should increase or decrease based on which handle
+          const isIncreasing =
+            (resizeHandle === "text-se" && (deltaX > 0 || deltaY > 0)) ||
+            (resizeHandle === "text-sw" && (deltaX < 0 || deltaY > 0)) ||
+            (resizeHandle === "text-ne" && (deltaX > 0 || deltaY < 0)) ||
+            (resizeHandle === "text-nw" && (deltaX < 0 || deltaY < 0));
 
-        if (resizeHandle === "se") {
-          const delta = Math.max(deltaX, deltaY);
-          newWidth = originalSize.width + delta;
-          newHeight = newWidth / aspectRatio;
-        } else if (resizeHandle === "nw") {
-          const delta = Math.min(deltaX, deltaY);
-          newWidth = originalSize.width - delta;
-          newHeight = newWidth / aspectRatio;
-          newX = shape.points[0].x + delta;
-          newY = shape.points[0].y + delta;
-        } else if (resizeHandle === "ne") {
-          newWidth = originalSize.width + deltaX;
-          newHeight = newWidth / aspectRatio;
-          newY = shape.points[0].y + deltaY;
-        } else if (resizeHandle === "sw") {
-          newWidth = originalSize.width - deltaX;
-          newHeight = newWidth / aspectRatio;
-          newX = shape.points[0].x + deltaX;
-        }
+          // Use original size as base, not the current potentially modified size
+          const baseTextSize = originalSize.width; // originalSize.width stores the original text size
+          const sizeChange = Math.round(distance / 3); // Make resizing more gradual
+          const newTextSize = isIncreasing
+            ? baseTextSize + sizeChange
+            : baseTextSize - sizeChange;
 
-        if (newWidth > 20 && newHeight > 20) {
+          // Clamp text size between 12px and 72px
+          const clampedTextSize = Math.max(12, Math.min(72, newTextSize));
+
+          // Always update the dragged shape during resizing for smooth feedback
           const updatedShape = {
             ...shape,
-            points: [{ x: newX, y: newY }],
-            imageWidth: newWidth,
-            imageHeight: newHeight,
+            strokeWidth: clampedTextSize / 8, // Convert back to strokeWidth format
           };
-          updatedShape.bounds = calculateBounds(
-            updatedShape
-          ) as Shape["bounds"];
+          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
           setDraggedShape(updatedShape);
+        } else if (shape.type === "image") {
+          // Handle image resizing
+          const deltaX = point.x - resizeStart.x;
+          const deltaY = point.y - resizeStart.y;
+
+          let newWidth = originalSize.width;
+          let newHeight = originalSize.height;
+          let newX = shape.points[0].x;
+          let newY = shape.points[0].y;
+
+          const aspectRatio = originalSize.width / originalSize.height;
+
+          if (resizeHandle === "se") {
+            const delta = Math.max(deltaX, deltaY);
+            newWidth = originalSize.width + delta;
+            newHeight = newWidth / aspectRatio;
+          } else if (resizeHandle === "nw") {
+            const delta = Math.min(deltaX, deltaY);
+            newWidth = originalSize.width - delta;
+            newHeight = newWidth / aspectRatio;
+            newX = shape.points[0].x + delta;
+            newY = shape.points[0].y + delta;
+          } else if (resizeHandle === "ne") {
+            newWidth = originalSize.width + deltaX;
+            newHeight = newWidth / aspectRatio;
+            newY = shape.points[0].y + deltaY;
+          } else if (resizeHandle === "sw") {
+            newWidth = originalSize.width - deltaX;
+            newHeight = newWidth / aspectRatio;
+            newX = shape.points[0].x + deltaX;
+          }
+
+          if (newWidth > 20 && newHeight > 20) {
+            const updatedShape = {
+              ...shape,
+              points: [{ x: newX, y: newY }],
+              imageWidth: newWidth,
+              imageHeight: newHeight,
+            };
+            updatedShape.bounds = calculateBounds(
+              updatedShape
+            ) as Shape["bounds"];
+            setDraggedShape(updatedShape);
+          }
         }
       }
       return;
@@ -936,10 +1407,35 @@ export default function DrawingCanvas() {
     }
 
     if (isResizing && selectedShapeId && draggedShape) {
-      saveToHistory();
-      setShapes(
-        shapes.map((s) => (s.id === selectedShapeId ? draggedShape : s))
-      );
+      const originalShape = shapes.find(s => s.id === selectedShapeId);
+      if (originalShape) {
+        // Check if it's text resizing
+        if (originalShape.type === "text" && draggedShape.type === "text") {
+          // For text, we need to update the strokeWidth (font size) property
+          const modifyCommand = createModifyShapeCommand(
+            selectedShapeId,
+            originalShape,
+            draggedShape,
+            updateShapeFully
+          );
+          saveToHistory(modifyCommand);
+          modifyCommand.execute();
+        } else {
+          // For images and other shapes, use move command
+          const moveCommand = createMoveShapeCommand(
+            selectedShapeId,
+            originalShape.points,
+            draggedShape.points,
+            originalShape.imageWidth,
+            originalShape.imageHeight,
+            draggedShape.imageWidth,
+            draggedShape.imageHeight,
+            updateShape
+          );
+          saveToHistory(moveCommand);
+          moveCommand.execute();
+        }
+      }
       setDraggedShape(null);
       setIsResizing(false);
       setResizeHandle(null);
@@ -947,10 +1443,21 @@ export default function DrawingCanvas() {
     }
 
     if (isDragging && selectedShapeId && draggedShape) {
-      saveToHistory();
-      setShapes(
-        shapes.map((s) => (s.id === selectedShapeId ? draggedShape : s))
-      );
+      const originalShape = shapes.find(s => s.id === selectedShapeId);
+      if (originalShape) {
+        const moveCommand = createMoveShapeCommand(
+          selectedShapeId,
+          shapeStartPoints,
+          draggedShape.points,
+          originalShape.imageWidth,
+          originalShape.imageHeight,
+          draggedShape.imageWidth,
+          draggedShape.imageHeight,
+          updateShape
+        );
+        saveToHistory(moveCommand);
+        moveCommand.execute();
+      }
       setDraggedShape(null);
       setShapeStartPoints([]);
     }
@@ -960,8 +1467,9 @@ export default function DrawingCanvas() {
         ...currentShape,
         bounds: calculateBounds(currentShape),
       };
-      saveToHistory();
-      setShapes([...shapes, shapeWithBounds as Shape]);
+      const addCommand = createAddShapeCommand(shapeWithBounds as Shape, addShape, removeShape);
+      saveToHistory(addCommand);
+      addCommand.execute();
       setCurrentShape(null);
     }
 
@@ -976,41 +1484,71 @@ export default function DrawingCanvas() {
   const handleTextComplete = () => {
     if (textValue.trim()) {
       const canvas = canvasRef.current;
+
+      // Check if we're editing existing text
+      const existingTextShape = shapes.find(shape =>
+        shape.type === "text" &&
+        shape.points[0].x === textPosition.x &&
+        shape.points[0].y === textPosition.y
+      );
+
+      // Calculate bounds with proper text measurement
       let bounds = {
         minX: textPosition.x,
-        minY: textPosition.y - strokeWidth * 8,
-        maxX: textPosition.x + textValue.length * strokeWidth * 5,
+        minY: textPosition.y - textSize,
+        maxX: textPosition.x + textValue.length * textSize * 0.6,
         maxY: textPosition.y,
       };
 
       if (canvas) {
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          const baseFontSize = strokeWidth * 8;
-          const fontSize = getFontSize(baseFontSize);
-          ctx.font = `${fontSize}px 'Comic Sans MS', cursive, sans-serif`;
+          const fontSize = getFontSize(textSize);
+          ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
           const metrics = ctx.measureText(textValue);
           const textHeight = fontSize;
+          const padding = 10; // Consistent padding with other text calculations
           bounds = {
-            minX: textPosition.x,
-            minY: textPosition.y - textHeight,
-            maxX: textPosition.x + metrics.width,
-            maxY: textPosition.y,
+            minX: textPosition.x - padding,
+            minY: textPosition.y - textHeight - padding,
+            maxX: textPosition.x + Math.max(metrics.width, 50) + padding, // Ensure minimum width
+            maxY: textPosition.y + padding,
           };
         }
       }
 
-      const newShape: Shape = {
-        id: Date.now().toString(),
-        type: "text",
-        points: [textPosition],
-        color,
-        strokeWidth,
-        text: textValue,
-        bounds,
-      };
-      saveToHistory();
-      setShapes([...shapes, newShape]);
+      if (existingTextShape) {
+        // Update existing text shape
+        const updatedShape: Shape = {
+          ...existingTextShape,
+          text: textValue,
+          strokeWidth: textSize / 8, // Convert back to strokeWidth format
+          bounds,
+        };
+
+        const modifyCommand = createModifyShapeCommand(
+          existingTextShape.id,
+          existingTextShape,
+          updatedShape,
+          updateShapeFully
+        );
+        saveToHistory(modifyCommand);
+        modifyCommand.execute();
+      } else {
+        // Create new text shape
+        const newShape: Shape = {
+          id: Date.now().toString(),
+          type: "text",
+          points: [textPosition],
+          color,
+          strokeWidth: textSize / 8, // Convert textSize to strokeWidth format
+          text: textValue,
+          bounds,
+        };
+        const addCommand = createAddShapeCommand(newShape, addShape, removeShape);
+        saveToHistory(addCommand);
+        addCommand.execute();
+      }
     }
     setIsEditingText(false);
     setTextValue("");
@@ -1039,18 +1577,20 @@ export default function DrawingCanvas() {
 
   // Undo the last action
   const handleUndo = () => {
-    if (historyIndex > 0) {
-      setHistoryIndex(historyIndex - 1);
-      setShapes(history[historyIndex - 1]);
+    if (commandIndex >= 0) {
+      const commandToUndo = commands[commandIndex];
+      commandToUndo.undo();
+      setCommandIndex(commandIndex - 1);
       setSelectedShapeId(null);
     }
   };
 
   // Redo the last action
   const handleRedo = () => {
-    if (historyIndex < history.length - 1) {
-      setHistoryIndex(historyIndex + 1);
-      setShapes(history[historyIndex + 1]);
+    if (commandIndex < commands.length - 1) {
+      const commandToRedo = commands[commandIndex + 1];
+      commandToRedo.execute();
+      setCommandIndex(commandIndex + 1);
       setSelectedShapeId(null);
     }
   };
@@ -1058,9 +1598,11 @@ export default function DrawingCanvas() {
   // Clear the canvas
   const handleClear = () => {
     // Save the current state to history
-    saveToHistory();
-    // Clear the canvas
-    setShapes([]);
+    if (shapes.length > 0) {
+      const deleteCommand = createDeleteShapesCommand(shapes, addShape, removeShape);
+      saveToHistory(deleteCommand);
+      deleteCommand.execute();
+    }
     // Clear the selected shape
     setSelectedShapeId(null);
     // Clear all in the canvas
@@ -1128,8 +1670,9 @@ export default function DrawingCanvas() {
           },
         };
 
-        saveToHistory();
-        setShapes((prevShapes) => [...prevShapes, newShape]);
+        const addCommand = createAddShapeCommand(newShape, addShape, removeShape);
+        saveToHistory(addCommand);
+        addCommand.execute();
         setTool("select");
 
         // Force a redraw after state update
@@ -1205,7 +1748,7 @@ export default function DrawingCanvas() {
               size="icon"
               className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
               onClick={handleUndo}
-              disabled={historyIndex <= 0}
+              disabled={commandIndex < 0}
               title="Deshacer"
             >
               <RotateCcw className="h-4 w-4" />
@@ -1215,7 +1758,7 @@ export default function DrawingCanvas() {
               size="icon"
               className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
               onClick={handleRedo}
-              disabled={historyIndex >= history.length - 1}
+              disabled={commandIndex >= commands.length - 1}
               title="Rehacer"
             >
               <RotateCw className="h-4 w-4" />
@@ -1337,7 +1880,7 @@ export default function DrawingCanvas() {
                   ? "cursor-grabbing"
                   : "cursor-grab"
                 : tool === "select"
-                ? "cursor-default"
+                ? cursorStyle
                 : "cursor-crosshair"
             )}
             onMouseDown={handleMouseDown}
@@ -1402,9 +1945,8 @@ export default function DrawingCanvas() {
                   setTextValue("");
                 }
               }}
-              className="absolute border-2 border-blue-500 bg-white px-2 py-1 text-base outline-none dark:bg-card z-[100] resize-none"
+              placeholder="Escribe texto..."
               style={textEditor.style}
-              placeholder="Escribe texto... (Enter = terminar, Shift+Enter = salto)"
               autoFocus
               autoComplete="off"
               autoCorrect="off"
@@ -1689,27 +2231,61 @@ export default function DrawingCanvas() {
             title="Color"
           />
           <div className="h-5 w-px bg-border sm:h-6" />
-          <div className="flex items-center gap-0.5 sm:gap-1">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8"
-              onClick={() => setStrokeWidth(Math.max(1, strokeWidth - 1))}
-            >
-              <Minus className="h-3 w-3" />
-            </Button>
-            <span className="min-w-[18px] text-center text-xs font-medium sm:min-w-[20px]">
-              {strokeWidth}
-            </span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8"
-              onClick={() => setStrokeWidth(Math.min(10, strokeWidth + 1))}
-            >
-              <Plus className="h-3 w-3" />
-            </Button>
-          </div>
+
+          {/* Text size control - only show when text tool is selected */}
+          {tool === "text" ? (
+            <div className="flex items-center gap-0.5 sm:gap-1">
+              <span className="text-xs font-medium text-black sm:text-sm">
+                Tamaño:
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => setTextSize(Math.max(12, textSize - 2))}
+                title="Reducir texto"
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="min-w-[22px] text-center text-xs font-medium text-black sm:min-w-[24px] sm:text-sm">
+                {textSize}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => setTextSize(Math.min(72, textSize + 2))}
+                title="Aumentar texto"
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center gap-0.5 sm:gap-1">
+              <span className="text-xs font-medium text-slate-500 dark:text-slate-400 sm:text-sm">
+                Grosor:
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => setStrokeWidth(Math.max(1, strokeWidth - 1))}
+              >
+                <Minus className="h-3 w-3" />
+              </Button>
+              <span className="min-w-[18px] text-center text-xs font-medium sm:min-w-[20px]">
+                {strokeWidth}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => setStrokeWidth(Math.min(10, strokeWidth + 1))}
+              >
+                <Plus className="h-3 w-3" />
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* History controls - Mobile bottom */}
@@ -1719,7 +2295,7 @@ export default function DrawingCanvas() {
             size="icon"
             className="h-7 w-7 sm:h-8 sm:w-8"
             onClick={handleUndo}
-            disabled={historyIndex <= 0}
+            disabled={commandIndex < 0}
             title="Deshacer"
           >
             <RotateCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -1729,7 +2305,7 @@ export default function DrawingCanvas() {
             size="icon"
             className="h-7 w-7 sm:h-8 sm:w-8"
             onClick={handleRedo}
-            disabled={historyIndex >= history.length - 1}
+            disabled={commandIndex >= commands.length - 1}
             title="Rehacer"
           >
             <RotateCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
