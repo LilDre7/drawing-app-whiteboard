@@ -284,6 +284,17 @@ export default function DrawingCanvas() {
   const previewRafIdRef = useRef<number | null>(null);
   const [roughness, setRoughness] = useState(0.2);
 
+  // Throttling para mejorar rendimiento en móvil
+  const lastUpdateTimeRef = useRef<number>(0);
+  const isTouchDeviceRef = useRef<boolean>(false);
+
+  // Referencia para almacenar la información original de redimensionado
+  const resizeDataRef = useRef<{
+    originalStart: Point;
+    originalEnd: Point;
+    aspectRatio: number;
+  } | null>(null);
+
   const [tool, setTool] = useState<Tool>("select");
   const [isDrawing, setIsDrawing] = useState(false);
   const [shapes, setShapes] = useState<Shape[]>([]);
@@ -557,19 +568,27 @@ export default function DrawingCanvas() {
   };
 
   // Check if the point is inside the shape
-  const isPointInShape = (point: Point, shape: Shape): boolean => {
+  const isPointInShape = (point: Point, shape: Shape, isTouchEvent: boolean = false): boolean => {
     const bounds = shape.bounds || calculateBounds(shape);
     if (!bounds) return false;
 
-    const padding = 10;
+    // Padding diferenciado para touch vs mouse
+    const basePadding = isTouchEvent ? 15 : 8;
+
+    // Padding adicional basado en el grosor del stroke para figuras geométricas
+    const strokeWidthPadding = shape.type === "rectangle" || shape.type === "circle" || shape.type === "line"
+      ? Math.max(shape.strokeWidth * 2, 4)
+      : 0;
+
+    const totalPadding = basePadding + strokeWidthPadding;
 
     // Para texto, imagen y pencil, usar el bounding box completo
     if (shape.type === "text" || shape.type === "image" || shape.type === "pencil") {
       return (
-        point.x >= bounds.minX - padding &&
-        point.x <= bounds.maxX + padding &&
-        point.y >= bounds.minY - padding &&
-        point.y <= bounds.maxY + padding
+        point.x >= bounds.minX - basePadding &&
+        point.x <= bounds.maxX + basePadding &&
+        point.y >= bounds.minY - basePadding &&
+        point.y <= bounds.maxY + basePadding
       );
     }
 
@@ -577,29 +596,43 @@ export default function DrawingCanvas() {
     if (shape.type === "line" && shape.points.length >= 2) {
       const start = shape.points[0];
       const end = shape.points[shape.points.length - 1];
-      return isPointNearLine(point, start, end, padding);
+      return isPointNearLine(point, start, end, totalPadding);
     }
 
-    // Para rectángulos, verificar si el punto está cerca de los bordes
+    // Para rectángulos, verificar SOLO si el punto está cerca de los bordes (no el interior)
     if (shape.type === "rectangle" && shape.points.length >= 2) {
       const start = shape.points[0];
       const end = shape.points[shape.points.length - 1];
-      // Bordes del rectángulo
-      const topLeft = { x: Math.min(start.x, end.x), y: Math.min(start.y, end.y) };
-      const bottomRight = { x: Math.max(start.x, end.x), y: Math.max(start.y, end.y) };
-      const topRight = { x: bottomRight.x, y: topLeft.y };
-      const bottomLeft = { x: topLeft.x, y: bottomRight.y };
 
-      // Verificar si está cerca de cualquier borde
-      return (
-        isPointNearLine(point, topLeft, topRight, padding) || // Borde superior
-        isPointNearLine(point, topRight, bottomRight, padding) || // Borde derecho
-        isPointNearLine(point, bottomRight, bottomLeft, padding) || // Borde inferior
-        isPointNearLine(point, bottomLeft, topLeft, padding) // Borde izquierdo
-      );
+      // Calcular las esquinas del rectángulo (ordenadas correctamente)
+      const minX = Math.min(start.x, end.x);
+      const minY = Math.min(start.y, end.y);
+      const maxX = Math.max(start.x, end.x);
+      const maxY = Math.max(start.y, end.y);
+
+      // Definir los cuatro bordes
+      const topLeft = { x: minX, y: minY };
+      const topRight = { x: maxX, y: minY };
+      const bottomRight = { x: maxX, y: maxY };
+      const bottomLeft = { x: minX, y: maxY };
+
+      // Verificar si está cerca de cualquier borde PERO no dentro del rectángulo
+      const nearTopEdge = isPointNearLine(point, topLeft, topRight, totalPadding);
+      const nearRightEdge = isPointNearLine(point, topRight, bottomRight, totalPadding);
+      const nearBottomEdge = isPointNearLine(point, bottomRight, bottomLeft, totalPadding);
+      const nearLeftEdge = isPointNearLine(point, bottomLeft, topLeft, totalPadding);
+
+      // Verificar que el punto no esté claramente dentro del rectángulo (a menos que esté muy cerca del borde)
+      const isInsideRectangle = point.x > minX + totalPadding &&
+                               point.x < maxX - totalPadding &&
+                               point.y > minY + totalPadding &&
+                               point.y < maxY - totalPadding;
+
+      // Solo retornar true si está cerca de un borde Y no está claramente dentro
+      return (nearTopEdge || nearRightEdge || nearBottomEdge || nearLeftEdge) && !isInsideRectangle;
     }
 
-    // Para círculos, verificar si el punto está cerca del perímetro
+    // Para círculos, verificar SOLO si el punto está cerca del perímetro (no el interior)
     if (shape.type === "circle" && shape.points.length >= 2) {
       const center = shape.points[0];
       const edgePoint = shape.points[shape.points.length - 1];
@@ -609,8 +642,15 @@ export default function DrawingCanvas() {
       const distance = Math.sqrt(
         Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
       );
-      // Verificar si el punto está cerca del perímetro del círculo
-      return Math.abs(distance - radius) <= padding;
+
+      // Verificar si está cerca del perímetro del círculo
+      const nearPerimeter = Math.abs(distance - radius) <= totalPadding;
+
+      // Verificar que no esté claramente dentro del círculo (a menos que esté muy cerca del borde)
+      const isInsideCircle = distance < radius - totalPadding;
+
+      // Solo retornar true si está cerca del perímetro Y no está claramente dentro
+      return nearPerimeter && !isInsideCircle;
     }
 
     return false;
@@ -653,15 +693,15 @@ export default function DrawingCanvas() {
   };
 
   // Get the resize handle of the shape
-  const getResizeHandle = (point: Point, shape: Shape): ResizeHandle => {
+  const getResizeHandle = (point: Point, shape: Shape, isTouchEvent: boolean = false): ResizeHandle => {
     if (shape.type === "text" && shape.bounds) {
       // Check for text resize handles at all four corners
-      const padding = 8;
-      const selectionX = shape.bounds.minX - padding;
-      const selectionY = shape.bounds.minY - padding;
-      const selectionWidth = shape.bounds.maxX - shape.bounds.minX + padding * 2;
-      const selectionHeight = shape.bounds.maxY - shape.bounds.minY + padding * 2;
-      const handleSize = 8;
+      const basePadding = isTouchEvent ? 12 : 8;
+      const selectionX = shape.bounds.minX - basePadding;
+      const selectionY = shape.bounds.minY - basePadding;
+      const selectionWidth = shape.bounds.maxX - shape.bounds.minX + basePadding * 2;
+      const selectionHeight = shape.bounds.maxY - shape.bounds.minY + basePadding * 2;
+      const handleSize = isTouchEvent ? 12 : 8;
 
       // Top-left corner handle
       if (
@@ -698,38 +738,146 @@ export default function DrawingCanvas() {
       return null;
     }
 
-    if (shape.type !== "image" || !shape.bounds) return null;
+    // Add resize handles for geometric shapes
+    if (shape.bounds) {
+      const handleSize = isTouchEvent ? 12 : 8;
+      const bounds = shape.bounds;
+      const padding = shape.type === "rectangle" || shape.type === "circle" ? 5 : 0;
 
-    const handleSize = 8;
-    const bounds = shape.bounds;
+      // Check each corner for rectangles and circles
+      if (shape.type === "rectangle" || shape.type === "circle" || shape.type === "image") {
+        const paddedBounds = {
+          minX: bounds.minX - padding,
+          minY: bounds.minY - padding,
+          maxX: bounds.maxX + padding,
+          maxY: bounds.maxY + padding,
+        };
 
-    // Check each corner
-    if (
-      Math.abs(point.x - bounds.minX) < handleSize &&
-      Math.abs(point.y - bounds.minY) < handleSize
-    ) {
-      return "nw";
-    }
-    if (
-      Math.abs(point.x - bounds.maxX) < handleSize &&
-      Math.abs(point.y - bounds.minY) < handleSize
-    ) {
-      return "ne";
-    }
-    if (
-      Math.abs(point.x - bounds.minX) < handleSize &&
-      Math.abs(point.y - bounds.maxY) < handleSize
-    ) {
-      return "sw";
-    }
-    if (
-      Math.abs(point.x - bounds.maxX) < handleSize &&
-      Math.abs(point.y - bounds.maxY) < handleSize
-    ) {
-      return "se";
+        // Check each corner
+        if (
+          Math.abs(point.x - paddedBounds.minX) < handleSize &&
+          Math.abs(point.y - paddedBounds.minY) < handleSize
+        ) {
+          return "nw";
+        }
+        if (
+          Math.abs(point.x - paddedBounds.maxX) < handleSize &&
+          Math.abs(point.y - paddedBounds.minY) < handleSize
+        ) {
+          return "ne";
+        }
+        if (
+          Math.abs(point.x - paddedBounds.minX) < handleSize &&
+          Math.abs(point.y - paddedBounds.maxY) < handleSize
+        ) {
+          return "sw";
+        }
+        if (
+          Math.abs(point.x - paddedBounds.maxX) < handleSize &&
+          Math.abs(point.y - paddedBounds.maxY) < handleSize
+        ) {
+          return "se";
+        }
+      }
+
+      // Special resize handles for lines (endpoints)
+      if (shape.type === "line" && shape.points.length >= 2) {
+        const start = shape.points[0];
+        const end = shape.points[shape.points.length - 1];
+
+        // Check line endpoints
+        if (Math.sqrt(Math.pow(point.x - start.x, 2) + Math.pow(point.y - start.y, 2)) < handleSize) {
+          return "nw"; // Start point
+        }
+        if (Math.sqrt(Math.pow(point.x - end.x, 2) + Math.pow(point.y - end.y, 2)) < handleSize) {
+          return "se"; // End point
+        }
+      }
     }
 
     return null;
+  };
+
+  // Draw resize preview outline
+  const drawResizePreview = (ctx: CanvasRenderingContext2D) => {
+    if (!isResizing || !selectedShapeId || !resizeHandle || !draggedShape) return;
+
+    ctx.save();
+
+    // Make the preview much more visible
+    ctx.strokeStyle = "#ff0000"; // Red color for high visibility 
+    ctx.lineWidth = 3; // Thicker lines
+    ctx.setLineDash([8, 4]); // More prominent dashes
+    ctx.fillStyle = "rgba(193, 168, 168, 0.15)"; // Red semi-transparent fill
+
+    if (draggedShape.type === "rectangle" && draggedShape.points.length >= 2) {
+      const start = draggedShape.points[0];
+      const end = draggedShape.points[draggedShape.points.length - 1];
+
+      // Draw preview rectangle with visible red fill
+      ctx.fillRect(start.x, start.y, end.x - start.x, end.y - start.y);
+      ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+
+      // Draw corner indicators for extra visibility
+      ctx.fillStyle = "#ff0000";
+      const cornerSize = 6;
+      ctx.fillRect(start.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
+      ctx.fillRect(end.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
+      ctx.fillRect(start.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
+      ctx.fillRect(end.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
+
+    } else if (draggedShape.type === "circle" && draggedShape.points.length >= 2) {
+      const center = draggedShape.points[0];
+      const edge = draggedShape.points[draggedShape.points.length - 1];
+      const radius = Math.sqrt(
+        Math.pow(edge.x - center.x, 2) + Math.pow(edge.y - center.y, 2)
+      );
+
+      // Draw preview circle with red fill
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, radius, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.stroke();
+
+      // Draw center point for extra visibility
+      ctx.fillStyle = "#ff0000";
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 4, 0, 2 * Math.PI);
+      ctx.fill();
+
+    } else if (draggedShape.type === "line" && draggedShape.points.length >= 2) {
+      const start = draggedShape.points[0];
+      const end = draggedShape.points[draggedShape.points.length - 1];
+
+      // Draw very visible preview line
+      ctx.lineWidth = Math.max(draggedShape.strokeWidth + 4, 6); // Much thicker
+      ctx.setLineDash([]);
+      ctx.strokeStyle = "#ff0000"; // Solid red
+      ctx.beginPath();
+      ctx.moveTo(start.x, start.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+
+      // Draw very visible endpoints as larger circles
+      ctx.fillStyle = "#ff0000";
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 8, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 8, 0, 2 * Math.PI);
+      ctx.fill();
+
+      // Draw white centers for the endpoints
+      ctx.fillStyle = "#ffffff";
+      ctx.beginPath();
+      ctx.arc(start.x, start.y, 4, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(end.x, end.y, 4, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+
+    ctx.restore();
   };
 
   // Redraw the canvas (base layer only, committed shapes)
@@ -761,7 +909,12 @@ export default function DrawingCanvas() {
       drawShape(ctx, shape, shape.id === selectedShapeId);
     });
 
-    // Dibujar el shape que se está arrastrando
+    // Dibujar preview de redimensionamiento si está activo (dibujar primero para que esté debajo)
+    if (isResizing && selectedShapeId && draggedShape) {
+      drawResizePreview(ctx);
+    }
+
+    // Dibujar el shape que se está arrastrando (arriba de la preview)
     if (draggedShape) {
       drawShape(ctx, draggedShape, true);
     }
@@ -797,7 +950,74 @@ export default function DrawingCanvas() {
     ctx.translate(-offsetX, -offsetY);
 
     // Dibujar la forma actual en progreso (cualquier tipo)
-    drawShape(ctx, currentShape, false);
+    // Hacerla más visible durante el dibujo
+    if (currentShape.type === "line" || currentShape.type === "rectangle" || currentShape.type === "circle") {
+      // Para formas geométricas, hacerlas más visibles
+      ctx.save();
+
+      // Mejora: Añadir efecto de vista previa más visible
+      ctx.strokeStyle = currentShape.color;
+      ctx.lineWidth = Math.max(currentShape.strokeWidth, 2);
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+      ctx.globalAlpha = 0.85; // Ligeramente más opaco para mejor visibilidad
+
+      // Añadir línea punteada para indicar que es una vista previa
+      ctx.setLineDash([5, 3]);
+
+      if (currentShape.type === "line" && currentShape.points.length >= 2) {
+        ctx.beginPath();
+        ctx.moveTo(currentShape.points[0].x, currentShape.points[0].y);
+        ctx.lineTo(currentShape.points[currentShape.points.length - 1].x, currentShape.points[currentShape.points.length - 1].y);
+        ctx.stroke();
+
+        // Dibujar puntos en los extremos para mayor visibilidad
+        ctx.fillStyle = currentShape.color;
+        ctx.beginPath();
+        ctx.arc(currentShape.points[0].x, currentShape.points[0].y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(currentShape.points[currentShape.points.length - 1].x, currentShape.points[currentShape.points.length - 1].y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.fill();
+
+      } else if (currentShape.type === "rectangle" && currentShape.points.length >= 2) {
+        const start = currentShape.points[0];
+        const end = currentShape.points[currentShape.points.length - 1];
+
+        // Dibujar el rectángulo principal
+        ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+
+        // Añadir puntos en las esquinas para mayor visibilidad
+        ctx.fillStyle = currentShape.color;
+        const cornerSize = Math.max(3, currentShape.strokeWidth/2 + 1);
+        ctx.fillRect(start.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
+        ctx.fillRect(end.x - cornerSize/2, start.y - cornerSize/2, cornerSize, cornerSize);
+        ctx.fillRect(start.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
+        ctx.fillRect(end.x - cornerSize/2, end.y - cornerSize/2, cornerSize, cornerSize);
+
+      } else if (currentShape.type === "circle" && currentShape.points.length >= 2) {
+        const start = currentShape.points[0];
+        const end = currentShape.points[currentShape.points.length - 1];
+        const radius = Math.sqrt(
+          Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
+        );
+        ctx.beginPath();
+        ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
+        ctx.stroke();
+
+        // Dibujar punto central y punto en el perímetro para mayor visibilidad
+        ctx.fillStyle = currentShape.color;
+        ctx.beginPath();
+        ctx.arc(start.x, start.y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(end.x, end.y, Math.max(3, currentShape.strokeWidth/2 + 1), 0, 2 * Math.PI);
+        ctx.fill();
+      }
+      ctx.restore();
+    } else {
+      drawShape(ctx, currentShape, false);
+    }
   };
 
   // Draw the shape on the canvas
@@ -884,7 +1104,7 @@ export default function DrawingCanvas() {
         const selectionHeight = shape.bounds.maxY - shape.bounds.minY + padding * 2;
 
         // Draw solid border rectangle
-        ctx.strokeStyle = "#3b82f6";
+        ctx.strokeStyle = "#ff0000";
         ctx.lineWidth = 1;
         ctx.setLineDash([]);
         ctx.strokeRect(selectionX, selectionY, selectionWidth, selectionHeight);
@@ -927,24 +1147,39 @@ export default function DrawingCanvas() {
         ctx.lineTo(selectionX + selectionWidth, selectionY + selectionHeight + cornerSize/2);
         ctx.stroke();
       } else {
-        // Draw rectangular selection for other shapes
-        ctx.strokeStyle = "#3b82f6";
+        // Draw rectangular selection for other shapes with visible dotted border
+        const padding = 8;
+
+        // Draw more visible dotted border
+        ctx.strokeStyle = "#2563eb"; // Darker blue for better visibility
         ctx.lineWidth = 2;
-        ctx.setLineDash([5, 5]);
-        const padding = 5;
+        ctx.setLineDash([8, 4]); // More prominent dashes
+
+        // Draw the selection rectangle
         ctx.strokeRect(
           shape.bounds.minX - padding,
           shape.bounds.minY - padding,
           shape.bounds.maxX - shape.bounds.minX + padding * 2,
           shape.bounds.maxY - shape.bounds.minY + padding * 2
         );
+
+        // Add a second dotted line for extra visibility
+        ctx.strokeStyle = "#60a5fa"; // Lighter blue
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 8]);
+        ctx.strokeRect(
+          shape.bounds.minX - padding - 2,
+          shape.bounds.minY - padding - 2,
+          shape.bounds.maxX - shape.bounds.minX + padding * 2 + 4,
+          shape.bounds.maxY - shape.bounds.minY + padding * 2 + 4
+        );
         ctx.setLineDash([]);
 
-        if (shape.type === "image") {
+        if (shape.type === "image" || shape.type === "rectangle" || shape.type === "circle") {
           const handleSize = 12;
           ctx.fillStyle = "#3b82f6";
 
-          // Draw corner handles
+          // Draw corner handles with more visibility
           ctx.fillRect(
             shape.bounds.minX - handleSize / 2,
             shape.bounds.minY - handleSize / 2,
@@ -969,6 +1204,56 @@ export default function DrawingCanvas() {
             handleSize,
             handleSize
           );
+
+          // Add white centers to corner handles for better visibility
+          ctx.fillStyle = "#ffffff";
+          const centerHandleSize = 6;
+          ctx.fillRect(
+            shape.bounds.minX - centerHandleSize / 2,
+            shape.bounds.minY - centerHandleSize / 2,
+            centerHandleSize,
+            centerHandleSize
+          );
+          ctx.fillRect(
+            shape.bounds.maxX - centerHandleSize / 2,
+            shape.bounds.minY - centerHandleSize / 2,
+            centerHandleSize,
+            centerHandleSize
+          );
+          ctx.fillRect(
+            shape.bounds.minX - centerHandleSize / 2,
+            shape.bounds.maxY - centerHandleSize / 2,
+            centerHandleSize,
+            centerHandleSize
+          );
+          ctx.fillRect(
+            shape.bounds.maxX - centerHandleSize / 2,
+            shape.bounds.maxY - centerHandleSize / 2,
+            centerHandleSize,
+            centerHandleSize
+          );
+        } else if (shape.type === "line" && shape.points.length >= 2) {
+          const handleSize = 8;
+          const start = shape.points[0];
+          const end = shape.points[shape.points.length - 1];
+
+          // Draw circular handles for line endpoints (more visible)
+          ctx.fillStyle = "#3b82f6";
+          ctx.beginPath();
+          ctx.arc(start.x, start.y, handleSize / 2, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(end.x, end.y, handleSize / 2, 0, 2 * Math.PI);
+          ctx.fill();
+
+          // Add white centers
+          ctx.fillStyle = "#ffffff";
+          ctx.beginPath();
+          ctx.arc(start.x, start.y, handleSize / 4, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(end.x, end.y, handleSize / 4, 0, 2 * Math.PI);
+          ctx.fill();
         }
       }
     }
@@ -1035,7 +1320,7 @@ export default function DrawingCanvas() {
     }));
   };
 
-  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement>): Point => {
+  const getMousePos = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>): Point => {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
@@ -1043,8 +1328,21 @@ export default function DrawingCanvas() {
     const offsetX = rect.width / 2;
     const offsetY = rect.height / 2;
 
-    const rawX = e.clientX - rect.left;
-    const rawY = e.clientY - rect.top;
+    // Manejar tanto eventos de mouse como de touch
+    let clientX, clientY;
+    if ('touches' in e) {
+      // Evento táctil
+      const touch = e.touches[0] || { clientX: 0, clientY: 0 };
+      clientX = touch.clientX;
+      clientY = touch.clientY;
+    } else {
+      // Evento de mouse
+      clientX = e.clientX;
+      clientY = e.clientY;
+    }
+
+    const rawX = clientX - rect.left;
+    const rawY = clientY - rect.top;
 
     const x = (rawX - offsetX - panOffset.x) / scale + offsetX;
     const y = (rawY - offsetY - panOffset.y) / scale + offsetY;
@@ -1062,14 +1360,7 @@ export default function DrawingCanvas() {
 
     if (clientX === undefined || clientY === undefined) return;
 
-    // Create a synthetic mouse event for getMousePos
-    const syntheticEvent = {
-      ...e,
-      clientX,
-      clientY,
-    } as React.MouseEvent<HTMLCanvasElement>;
-
-    const point = getMousePos(syntheticEvent);
+    const point = getMousePos(e);
 
     if (tool === "hand") {
       setIsPanning(true);
@@ -1081,7 +1372,7 @@ export default function DrawingCanvas() {
       if (selectedShapeId) {
         const selectedShape = shapes.find((s) => s.id === selectedShapeId);
         if (selectedShape) {
-          const handle = getResizeHandle(point, selectedShape);
+          const handle = getResizeHandle(point, selectedShape, 'touches' in e);
           if (handle) {
             if (selectedShape.type === "text" && (handle === "text-nw" || handle === "text-ne" || handle === "text-sw" || handle === "text-se")) {
               // Handle text resizing
@@ -1092,6 +1383,8 @@ export default function DrawingCanvas() {
                 width: selectedShape.strokeWidth * 8, // Convert to text size
                 height: selectedShape.strokeWidth * 8,
               });
+              // Limpiar resizeData para texto
+              resizeDataRef.current = null;
               return;
             } else if (selectedShape.type === "image") {
               // Handle image resizing
@@ -1102,6 +1395,44 @@ export default function DrawingCanvas() {
                 width: selectedShape.imageWidth || 0,
                 height: selectedShape.imageHeight || 0,
               });
+              // Limpiar resizeData para imágenes
+              resizeDataRef.current = null;
+              return;
+            } else if ((selectedShape.type === "rectangle" || selectedShape.type === "circle" || selectedShape.type === "line") &&
+                       (handle === "nw" || handle === "ne" || handle === "sw" || handle === "se")) {
+              // Handle geometric shape resizing
+              setIsResizing(true);
+              setResizeHandle(handle);
+              setResizeStart(point);
+
+              // Store original dimensions for geometric shapes
+              if (selectedShape.type === "rectangle" && selectedShape.points.length >= 2) {
+                const start = selectedShape.points[0];
+                const end = selectedShape.points[1];
+                setOriginalSize({
+                  width: Math.abs(end.x - start.x),
+                  height: Math.abs(end.y - start.y),
+                });
+              } else if (selectedShape.type === "circle" && selectedShape.points.length >= 2) {
+                const center = selectedShape.points[0];
+                const edge = selectedShape.points[1];
+                const radius = Math.sqrt(
+                  Math.pow(edge.x - center.x, 2) + Math.pow(edge.y - center.y, 2)
+                );
+                setOriginalSize({
+                  width: radius * 2,
+                  height: radius * 2,
+                });
+              } else if (selectedShape.type === "line" && selectedShape.points.length >= 2) {
+                const start = selectedShape.points[0];
+                const end = selectedShape.points[1];
+                setOriginalSize({
+                  width: Math.abs(end.x - start.x),
+                  height: Math.abs(end.y - start.y),
+                });
+              }
+              // Limpiar resizeData para formas geométricas (se inicializará en el primer movimiento)
+              resizeDataRef.current = null;
               return;
             }
           }
@@ -1110,7 +1441,7 @@ export default function DrawingCanvas() {
 
       const clickedShape = [...shapes]
         .reverse()
-        .find((shape) => isPointInShape(point, shape));
+        .find((shape) => isPointInShape(point, shape, 'touches' in e));
       if (clickedShape) {
         setSelectedShapeId(clickedShape.id);
         setIsDragging(true);
@@ -1129,7 +1460,7 @@ export default function DrawingCanvas() {
       // Check if clicking on existing text to edit it
       const clickedShape = [...shapes]
         .reverse()
-        .find((shape) => shape.type === "text" && isPointInShape(point, shape));
+        .find((shape) => shape.type === "text" && isPointInShape(point, shape, 'touches' in e));
 
       if (clickedShape && clickedShape.text) {
         // Edit existing text
@@ -1207,7 +1538,7 @@ export default function DrawingCanvas() {
       setIsErasing(true);
       const eraserRadius = strokeWidth * 5;
       const newShapes = shapes.filter((shape) => {
-        return !isPointInShape(point, shape);
+        return !isPointInShape(point, shape, 'touches' in e);
       });
       if (newShapes.length !== shapes.length) {
         const deletedShapes = shapes.filter(shape => !newShapes.includes(shape));
@@ -1228,13 +1559,31 @@ export default function DrawingCanvas() {
     setCurrentShape(newShape);
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if (isPanning && tool === "hand") {
-      setPanOffset({
-        x: e.clientX - panStart.x,
-        y: e.clientY - panStart.y,
-      });
+      const clientX = "touches" in e ? e.touches[0]?.clientX : e.clientX;
+      const clientY = "touches" in e ? e.touches[0]?.clientY : e.clientY;
+      if (clientX !== undefined && clientY !== undefined) {
+        setPanOffset({
+          x: clientX - panStart.x,
+          y: clientY - panStart.y,
+        });
+      }
       return;
+    }
+
+    // Detectar dispositivo táctil para throttling
+    if ('touches' in e) {
+      isTouchDeviceRef.current = true;
+    }
+
+    // Throttling para dispositivos móviles (limitar actualizaciones a ~60fps)
+    if (isTouchDeviceRef.current && 'touches' in e) {
+      const now = Date.now();
+      if (now - lastUpdateTimeRef.current < 16) { // ~60fps
+        return;
+      }
+      lastUpdateTimeRef.current = now;
     }
 
     const point = getMousePos(e);
@@ -1243,7 +1592,7 @@ export default function DrawingCanvas() {
     if (tool === "select" && selectedShapeId) {
       const selectedShape = shapes.find((s) => s.id === selectedShapeId);
       if (selectedShape) {
-        const handle = getResizeHandle(point, selectedShape);
+        const handle = getResizeHandle(point, selectedShape, isTouchDeviceRef.current);
         if (handle) {
           if (handle === "text-nw" || handle === "text-se") {
             setCursorStyle("cursor-nwse-resize");
@@ -1298,38 +1647,69 @@ export default function DrawingCanvas() {
           updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
           setDraggedShape(updatedShape);
         } else if (shape.type === "image") {
-          // Handle image resizing
-          const deltaX = point.x - resizeStart.x;
-          const deltaY = point.y - resizeStart.y;
-
-          let newWidth = originalSize.width;
-          let newHeight = originalSize.height;
-          let newX = shape.points[0].x;
-          let newY = shape.points[0].y;
+          // Handle image resizing - CORREGIDO
+          const imageX = shape.points[0].x;
+          const imageY = shape.points[0].y;
+          const currentWidth = shape.imageWidth || originalSize.width;
+          const currentHeight = shape.imageHeight || originalSize.height;
 
           const aspectRatio = originalSize.width / originalSize.height;
 
-          if (resizeHandle === "se") {
-            const delta = Math.max(deltaX, deltaY);
-            newWidth = originalSize.width + delta;
-            newHeight = newWidth / aspectRatio;
-          } else if (resizeHandle === "nw") {
-            const delta = Math.min(deltaX, deltaY);
-            newWidth = originalSize.width - delta;
-            newHeight = newWidth / aspectRatio;
-            newX = shape.points[0].x + delta;
-            newY = shape.points[0].y + delta;
-          } else if (resizeHandle === "ne") {
-            newWidth = originalSize.width + deltaX;
-            newHeight = newWidth / aspectRatio;
-            newY = shape.points[0].y + deltaY;
-          } else if (resizeHandle === "sw") {
-            newWidth = originalSize.width - deltaX;
-            newHeight = newWidth / aspectRatio;
-            newX = shape.points[0].x + deltaX;
+          // Sensibilidad reducida para imágenes
+          const sensitivityFactor = 0.7;
+
+          let newWidth = currentWidth;
+          let newHeight = currentHeight;
+          let newX = imageX;
+          let newY = imageY;
+
+          // Redimensionar según el handle con lógica correcta
+          switch (resizeHandle) {
+            case "se": // Esquina inferior derecha - aumentar ancho y alto
+              const deltaSE = Math.max(
+                (point.x - resizeStart.x) * sensitivityFactor,
+                (point.y - resizeStart.y) * sensitivityFactor
+              );
+              newWidth = originalSize.width + deltaSE;
+              newHeight = newWidth / aspectRatio;
+              break;
+
+            case "nw": // Esquina superior izquierda - mover origen y cambiar tamaño
+              const deltaNW = Math.min(
+                (point.x - resizeStart.x) * sensitivityFactor,
+                (point.y - resizeStart.y) * sensitivityFactor
+              );
+              newWidth = originalSize.width - deltaNW;
+              newHeight = newWidth / aspectRatio;
+              newX = imageX + deltaNW;
+              newY = imageY + deltaNW;
+              break;
+
+            case "ne": // Esquina superior derecha - mover origen Y y cambiar tamaño
+              const deltaX_NE = (point.x - resizeStart.x) * sensitivityFactor;
+              const deltaY_NE = (point.y - resizeStart.y) * sensitivityFactor;
+              newWidth = originalSize.width + deltaX_NE;
+              newHeight = newWidth / aspectRatio;
+              newY = imageY + deltaY_NE;
+              break;
+
+            case "sw": // Esquina inferior izquierda - mover origen X y cambiar tamaño
+              const deltaX_SW = (point.x - resizeStart.x) * sensitivityFactor;
+              const deltaY_SW = (point.y - resizeStart.y) * sensitivityFactor;
+              newWidth = originalSize.width - deltaX_SW;
+              newHeight = newWidth / aspectRatio;
+              newX = imageX + deltaX_SW;
+              break;
           }
 
-          if (newWidth > 20 && newHeight > 20) {
+          // Asegurar dimensiones mínimas
+          const minSize = 30;
+          if (newWidth < minSize) {
+            newWidth = minSize;
+            newHeight = newWidth / aspectRatio;
+          }
+
+          if (newWidth > minSize && newHeight > minSize) {
             const updatedShape = {
               ...shape,
               points: [{ x: newX, y: newY }],
@@ -1341,6 +1721,176 @@ export default function DrawingCanvas() {
             ) as Shape["bounds"];
             setDraggedShape(updatedShape);
           }
+        } else if (shape.type === "rectangle" && shape.points.length >= 2) {
+          // Handle rectangle resizing - CORREGIDO
+          const start = shape.points[0];
+          const end = shape.points[shape.points.length - 1];
+
+          // Calcular las esquinas reales del rectángulo (ordenado)
+          const minX = Math.min(start.x, end.x);
+          const minY = Math.min(start.y, end.y);
+          const maxX = Math.max(start.x, end.x);
+          const maxY = Math.max(start.y, end.y);
+
+          // Inicializar resizeData si es necesario
+          if (!resizeDataRef.current) {
+            resizeDataRef.current = {
+              originalStart: { x: minX, y: minY },
+              originalEnd: { x: maxX, y: maxY },
+              aspectRatio: (maxX - minX) / Math.max(1, maxY - minY)
+            };
+          }
+
+          const originalData = resizeDataRef.current;
+
+          // Sensibilidad reducida para movimientos más suaves
+          const sensitivityFactor = 0.8;
+
+          let newMinX = minX;
+          let newMinY = minY;
+          let newMaxX = maxX;
+          let newMaxY = maxY;
+
+          // Redimensionar según el handle con lógica correcta
+          switch (resizeHandle) {
+            case "se": // Esquina inferior derecha - mover maxX, maxY
+              newMaxX = originalData.originalEnd.x + (point.x - resizeStart.x) * sensitivityFactor;
+              newMaxY = originalData.originalEnd.y + (point.y - resizeStart.y) * sensitivityFactor;
+              break;
+
+            case "nw": // Esquina superior izquierda - mover minX, minY
+              newMinX = originalData.originalStart.x + (point.x - resizeStart.x) * sensitivityFactor;
+              newMinY = originalData.originalStart.y + (point.y - resizeStart.y) * sensitivityFactor;
+              break;
+
+            case "ne": // Esquina superior derecha - mover maxX, minY
+              newMaxX = originalData.originalEnd.x + (point.x - resizeStart.x) * sensitivityFactor;
+              newMinY = originalData.originalStart.y + (point.y - resizeStart.y) * sensitivityFactor;
+              break;
+
+            case "sw": // Esquina inferior izquierda - mover minX, maxY
+              newMinX = originalData.originalStart.x + (point.x - resizeStart.x) * sensitivityFactor;
+              newMaxY = originalData.originalEnd.y + (point.y - resizeStart.y) * sensitivityFactor;
+              break;
+          }
+
+          // Asegurar dimensiones mínimas y que las coordenadas estén en orden correcto
+          const minSize = 20;
+          if (Math.abs(newMaxX - newMinX) < minSize) {
+            if (resizeHandle === "nw" || resizeHandle === "sw") {
+              newMinX = newMaxX - minSize;
+            } else {
+              newMaxX = newMinX + minSize;
+            }
+          }
+          if (Math.abs(newMaxY - newMinY) < minSize) {
+            if (resizeHandle === "nw" || resizeHandle === "ne") {
+              newMinY = newMaxY - minSize;
+            } else {
+              newMaxY = newMinY + minSize;
+            }
+          }
+
+          // Crear nuevos puntos manteniendo la estructura original
+          let newStart, newEnd;
+          if (start.x <= end.x) {
+            newStart = { x: newMinX, y: start.y <= end.y ? newMinY : newMaxY };
+            newEnd = { x: newMaxX, y: start.y <= end.y ? newMaxY : newMinY };
+          } else {
+            newStart = { x: newMaxX, y: start.y <= end.y ? newMinY : newMaxY };
+            newEnd = { x: newMinX, y: start.y <= end.y ? newMaxY : newMinY };
+          }
+
+          const updatedShape = {
+            ...shape,
+            points: [newStart, newEnd],
+          };
+          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          setDraggedShape(updatedShape);
+        } else if (shape.type === "circle" && shape.points.length >= 2) {
+          // Handle circle resizing - CORREGIDO
+          const center = shape.points[0];
+          const edge = shape.points[shape.points.length - 1];
+
+          // Calcular el radio original
+          const originalRadius = Math.sqrt(
+            Math.pow(edge.x - center.x, 2) + Math.pow(edge.y - center.y, 2)
+          );
+
+          // Inicializar resizeData si es necesario para círculos
+          if (!resizeDataRef.current) {
+            resizeDataRef.current = {
+              originalStart: center,
+              originalEnd: edge,
+              aspectRatio: 1 // Los círculos tienen aspect ratio 1:1
+            };
+          }
+
+          // Sensibilidad reducida para círculos
+          const sensitivityFactor = 0.6;
+
+          // Calcular la distancia desde el centro hasta el punto actual
+          const currentDistance = Math.sqrt(
+            Math.pow(point.x - center.x, 2) + Math.pow(point.y - center.y, 2)
+          );
+
+          // Calcular el cambio en el radio
+          const radiusChange = (currentDistance - Math.sqrt(
+            Math.pow(resizeStart.x - center.x, 2) + Math.pow(resizeStart.y - center.y, 2)
+          )) * sensitivityFactor;
+
+          // Aplicar el cambio al radio original
+          let newRadius = originalRadius + radiusChange;
+
+          // Asegurar radio mínimo
+          newRadius = Math.max(15, newRadius);
+
+          // Calcular el ángulo original para mantener la orientación
+          const originalAngle = Math.atan2(edge.y - center.y, edge.x - center.x);
+
+          // Calcular nuevo punto en el perímetro
+          const newEdge = {
+            x: center.x + Math.cos(originalAngle) * newRadius,
+            y: center.y + Math.sin(originalAngle) * newRadius,
+          };
+
+          const updatedShape = {
+            ...shape,
+            points: [center, newEdge],
+          };
+          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          setDraggedShape(updatedShape);
+        } else if (shape.type === "line" && shape.points.length >= 2) {
+          // Handle line resizing from endpoints - CORREGIDO
+          const start = shape.points[0];
+          const end = shape.points[shape.points.length - 1];
+
+          // Sensibilidad reducida para líneas
+          const sensitivityFactor = 0.9;
+
+          let newStart = { ...start };
+          let newEnd = { ...end };
+
+          if (resizeHandle === "nw") {
+            // Redimensionar desde el punto de inicio
+            newStart = {
+              x: start.x + (point.x - resizeStart.x) * sensitivityFactor,
+              y: start.y + (point.y - resizeStart.y) * sensitivityFactor
+            };
+          } else if (resizeHandle === "se") {
+            // Redimensionar desde el punto final
+            newEnd = {
+              x: end.x + (point.x - resizeStart.x) * sensitivityFactor,
+              y: end.y + (point.y - resizeStart.y) * sensitivityFactor
+            };
+          }
+
+          const updatedShape = {
+            ...shape,
+            points: [newStart, newEnd],
+          };
+          updatedShape.bounds = calculateBounds(updatedShape) as Shape["bounds"];
+          setDraggedShape(updatedShape);
         }
       }
       return;
@@ -1348,7 +1898,7 @@ export default function DrawingCanvas() {
 
     if (tool === "eraser" && isErasing) {
       const newShapes = shapes.filter((shape) => {
-        return !isPointInShape(point, shape);
+        return !isPointInShape(point, shape, isTouchDeviceRef.current);
       });
       if (newShapes.length !== shapes.length) {
         setShapes(newShapes);
@@ -1377,6 +1927,7 @@ export default function DrawingCanvas() {
       return;
     }
 
+    // Mejora: Solo actualizar el currentShape si estamos dibujando y hay un cambio significativo
     if (!isDrawing || !currentShape) return;
 
     if (tool === "pencil") {
@@ -1385,13 +1936,17 @@ export default function DrawingCanvas() {
         points: [...currentShape.points, point],
       });
       requestPreviewRender(); // Preview solo
-    } else {
-      // Para líneas, rectángulos, círculos
-      setCurrentShape({
-        ...currentShape,
-        points: [currentShape.points[0], point],
-      });
-      requestRender(); // Canvas base
+    } else if (tool === "rectangle" || tool === "line" || tool === "circle") {
+      // Para formas geométricas, actualizar más eficientemente
+      const startPoint = currentShape.points[0];
+      // Solo actualizar si el punto realmente cambió significativamente
+      if (Math.abs(point.x - startPoint.x) > 1 || Math.abs(point.y - startPoint.y) > 1) {
+        setCurrentShape({
+          ...currentShape,
+          points: [startPoint, point],
+        });
+        requestPreviewRender(); // Usar preview render para consistencia
+      }
     }
   };
 
@@ -1439,6 +1994,8 @@ export default function DrawingCanvas() {
       setDraggedShape(null);
       setIsResizing(false);
       setResizeHandle(null);
+      // Limpiar resizeData al completar el redimensionado
+      resizeDataRef.current = null;
       return;
     }
 
@@ -1887,7 +2444,7 @@ export default function DrawingCanvas() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            // 👇 agrega estos para móvil
+            // Event handlers táctiles mejorados para móvil
             onTouchStart={(e) => {
               e.preventDefault();
               handleMouseDown(e);
@@ -1895,11 +2452,13 @@ export default function DrawingCanvas() {
             onTouchMove={(e) => {
               e.preventDefault();
               const touch = e.touches[0];
-              handleMouseMove({
-                ...e,
-                clientX: touch.clientX,
-                clientY: touch.clientY,
-              } as unknown as React.MouseEvent<HTMLCanvasElement>);
+              if (touch) {
+                handleMouseMove({
+                  ...e,
+                  clientX: touch.clientX,
+                  clientY: touch.clientY,
+                } as unknown as React.MouseEvent<HTMLCanvasElement>);
+              }
             }}
             onTouchEnd={(e) => {
               e.preventDefault();
@@ -1910,7 +2469,7 @@ export default function DrawingCanvas() {
           {/* Preview canvas (current transient stroke) */}
           <canvas
             ref={previewCanvasRef}
-            className="pointer-events-none absolute inset-0 h-full w-full"
+            className="pointer-events-none absolute inset-0 h-full w-full z-10"
           />
 
           <input
