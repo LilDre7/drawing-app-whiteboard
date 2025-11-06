@@ -426,6 +426,11 @@ export default function DrawingCanvas() {
 
   // request a render on next animation frame
   const requestRender = () => {
+    // Prevenir repintado durante edición de texto en móvil
+    if (isEditingText && isTouchDeviceRef.current) {
+      return; // No renderizar durante edición de texto en móvil
+    }
+
     if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
     rafIdRef.current = requestAnimationFrame(() => {
       rafIdRef.current = null;
@@ -449,39 +454,102 @@ export default function DrawingCanvas() {
     const container = containerRef.current;
     if (!canvas || !preview || !container) return;
 
-    const applySize = () => {
+    // Variables para controlar el redimensionamiento
+    let isEditingTextMobile = false;
+    let resizeTimeout: NodeJS.Timeout | null = null;
+    let lastViewportHeight = window.innerHeight;
+
+    const applySize = (force = false) => {
       const rect = container.getBoundingClientRect();
       viewportSizeRef.current = { width: rect.width, height: rect.height };
       const dpr = Math.max(1, Math.floor(window.devicePixelRatio || 1));
       devicePixelRatioRef.current = dpr;
       const targetWidth = Math.max(1, Math.round(rect.width * dpr));
       const targetHeight = Math.max(1, Math.round(rect.height * dpr));
-      if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
+
+      // Solo redimensionar si realmente es necesario o si se fuerza
+      const needsResize = canvas.width !== targetWidth || canvas.height !== targetHeight;
+
+      if (needsResize || force) {
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-      }
-      if (preview.width !== targetWidth || preview.height !== targetHeight) {
         preview.width = targetWidth;
         preview.height = targetHeight;
+        requestRender();
+        requestPreviewRender();
       }
-      requestRender();
-      requestPreviewRender();
     };
 
-    applySize();
+    // Función mejorada que detecta si el cambio es por el teclado
+    const smartResizeObserver = () => {
+      const currentHeight = window.innerHeight;
+      const heightChange = Math.abs(currentHeight - lastViewportHeight);
 
-    const ro = new ResizeObserver(() => applySize());
+      // Si estamos editando texto y el cambio de altura es pequeño (probablemente teclado)
+      if (isEditingTextMobile && heightChange < 300) {
+        // NO redimensionar el canvas, solo actualizar la referencia del viewport
+        const rect = container.getBoundingClientRect();
+        viewportSizeRef.current = {
+          width: rect.width,
+          height: rect.height
+        };
+        // No llamar a applySize() para evitar repintado
+        return;
+      }
+
+      lastViewportHeight = currentHeight;
+
+      // Para otros cambios, usar debounce para evitar múltiples redimensiones
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+
+      resizeTimeout = setTimeout(() => {
+        applySize();
+      }, 100);
+    };
+
+    // Función que se puede llamar externamente para indicar que se está editando texto
+    const setEditingTextMobile = (editing: boolean) => {
+      isEditingTextMobile = editing;
+    };
+
+    // Exponer la función globalmente para que pueda ser usada por el editor de texto
+    (window as any).setEditingTextMobile = setEditingTextMobile;
+
+    // ResizeObserver mejorado
+    const ro = new ResizeObserver(() => smartResizeObserver());
     ro.observe(container);
 
-    const onWindowResize = () => applySize();
+    // Evento window resize mejorado
+    const onWindowResize = () => smartResizeObserver();
     window.addEventListener("resize", onWindowResize);
+
+    // También escuchar cambios de orientation que pueden afectar el viewport
+    const onOrientationChange = () => {
+      // Dar tiempo a que se complete el cambio de orientación
+      setTimeout(() => {
+        isEditingTextMobile = false; // Resetear estado al cambiar orientación
+        applySize(true); // Forzar redimensionado
+      }, 500);
+    };
+    window.addEventListener("orientationchange", onOrientationChange);
+
+    // Aplicar tamaño inicial
+    applySize();
 
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", onWindowResize);
+      window.removeEventListener("orientationchange", onOrientationChange);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
       if (rafIdRef.current != null) cancelAnimationFrame(rafIdRef.current);
       if (previewRafIdRef.current != null)
         cancelAnimationFrame(previewRafIdRef.current);
+      // Limpiar referencia global
+      delete (window as any).setEditingTextMobile;
     };
   }, []);
 
@@ -1457,10 +1525,16 @@ export default function DrawingCanvas() {
       // Prevent default to avoid any interference
       e.preventDefault();
 
+      // Detectar si es dispositivo móvil y prevenir el redimensionamiento del canvas
+      const isTouchEvent = "touches" in e;
+      if (isTouchEvent && (window as any).setEditingTextMobile) {
+        (window as any).setEditingTextMobile(true);
+      }
+
       // Check if clicking on existing text to edit it
       const clickedShape = [...shapes]
         .reverse()
-        .find((shape) => shape.type === "text" && isPointInShape(point, shape, 'touches' in e));
+        .find((shape) => shape.type === "text" && isPointInShape(point, shape, isTouchEvent));
 
       if (clickedShape && clickedShape.text) {
         // Edit existing text
@@ -2109,6 +2183,18 @@ export default function DrawingCanvas() {
     }
     setIsEditingText(false);
     setTextValue("");
+
+    // Restaurar el redimensionamiento normal del canvas cuando se termina de editar texto
+    if ((window as any).setEditingTextMobile) {
+      (window as any).setEditingTextMobile(false);
+    }
+
+    // Forzar un repintado suave después de terminar la edición de texto en móvil
+    if (isTouchDeviceRef.current) {
+      setTimeout(() => {
+        requestRender();
+      }, 100);
+    }
   };
 
   const saveAsImage = () => {
@@ -2502,6 +2588,17 @@ export default function DrawingCanvas() {
                 if (e.key === "Escape") {
                   setIsEditingText(false);
                   setTextValue("");
+                  // Restaurar el redimensionamiento normal del canvas al cancelar
+                  if ((window as any).setEditingTextMobile) {
+                    (window as any).setEditingTextMobile(false);
+                  }
+
+                  // Forzar un repintado suave después de cancelar en móvil
+                  if (isTouchDeviceRef.current) {
+                    setTimeout(() => {
+                      requestRender();
+                    }, 100);
+                  }
                 }
               }}
               placeholder="Escribe texto..."
