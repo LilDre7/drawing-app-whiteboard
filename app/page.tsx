@@ -1,4 +1,4 @@
-import DrawingCanvas from "@/components/drawing-canvas"
+import DrawingCanvas from "@/components/drawing-canvas-main"
 
 export default function Home() {
   return (
