@@ -434,73 +434,305 @@ export default function DrawingCanvas() {
 
   // Helper functions for shape manipulation
 
-  // Validate and clean shapes array periodically
+  // Function to add roughness/hand-drawn effect to points
+  const addRoughnessToPoints = (points: Point[], roughnessAmount: number = 1.5): Point[] => {
+    if (points.length < 2) return points;
+
+    const roughPoints: Point[] = [];
+    roughPoints.push(points[0]);
+
+    for (let i = 1; i < points.length - 1; i++) {
+      const prevPoint = points[i - 1];
+      const currentPoint = points[i];
+      const nextPoint = points[i + 1];
+
+      // Calculate line direction for perpendicular offsets
+      const lineDirX = nextPoint.x - prevPoint.x;
+      const lineDirY = nextPoint.y - prevPoint.y;
+      const lineLength = Math.sqrt(lineDirX * lineDirX + lineDirY * lineDirY);
+
+      // Normalize line direction
+      const normDirX = lineDirX / lineLength;
+      const normDirY = lineDirY / lineLength;
+
+      // Calculate perpendicular direction
+      const perpDirX = -normDirY;
+      const perpDirY = normDirX;
+
+      // Create zigzag effect with alternating perpendicular offsets
+      const zigzagIntensity = roughnessAmount * 2.5; // Much more exaggerated
+      const perpendicularOffset = (i % 2 === 0 ? 1 : -1) * zigzagIntensity;
+
+      // Add random jitter for cartoonish effect
+      const jitterX = (Math.random() - 0.5) * roughnessAmount * 1.5;
+      const jitterY = (Math.random() - 0.5) * roughnessAmount * 1.5;
+
+      // Apply both perpendicular offset and jitter
+      const roughPoint = {
+        x: currentPoint.x + perpDirX * perpendicularOffset + jitterX,
+        y: currentPoint.y + perpDirY * perpendicularOffset + jitterY
+      };
+
+      roughPoints.push(roughPoint);
+    }
+
+    // Add last point with slight jitter
+    if (points.length > 1) {
+      const lastPoint = points[points.length - 1];
+      const finalJitterX = (Math.random() - 0.5) * roughnessAmount * 0.5;
+      const finalJitterY = (Math.random() - 0.5) * roughnessAmount * 0.5;
+
+      roughPoints.push({
+        x: lastPoint.x + finalJitterX,
+        y: lastPoint.y + finalJitterY
+      });
+    }
+
+    return roughPoints;
+  };
+
+  // Function to create wavy line effect
+  const createWavyLine = (start: Point, end: Point, segments: number = 3): Point[] => {
+    const points: Point[] = [];
+    const dx = (end.x - start.x) / segments;
+    const dy = (end.y - start.y) / segments;
+
+    for (let i = 0; i <= segments; i++) {
+      const baseX = start.x + (dx * i);
+      const baseY = start.y + (dy * i);
+
+      // Add perpendicular wave effect - much more exaggerated
+      const perpX = -dy;
+      const perpY = dx;
+      const length = Math.sqrt(perpX * perpX + perpY * perpY);
+      const perpNormX = perpX / length;
+      const perpNormY = perpY / length;
+
+      const waveAmplitude = 3.5; // Much more wavy
+      const waveOffset = Math.sin(i * Math.PI * 1.5) * waveAmplitude; // More complex wave pattern
+
+      points.push({
+        x: baseX + perpNormX * waveOffset,
+        y: baseY + perpNormY * waveOffset
+      });
+    }
+
+    return addRoughnessToPoints(points, 2.5); // Much more roughness
+  };
+
+  // Enhanced validation and clean shapes array
   const validateShapes = useCallback((shapesArray: Shape[]) => {
     return shapesArray.filter(shape => {
-      if (!shape || !shape.id || !shape.points || shape.points.length === 0) {
+      // Basic shape validation
+      if (!shape || !shape.id || typeof shape.id !== 'string') {
+        console.warn("Invalid shape: missing or invalid id", shape);
         return false;
       }
 
-      // Check if all points are valid
-      const hasValidPoints = shape.points.some(p =>
-        p && typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x) && !isNaN(p.y)
+      if (!shape.type || typeof shape.type !== 'string') {
+        console.warn("Invalid shape: missing or invalid type", shape);
+        return false;
+      }
+
+      if (!shape.points || !Array.isArray(shape.points) || shape.points.length === 0) {
+        console.warn("Invalid shape: missing or empty points array", shape);
+        return false;
+      }
+
+      // Validate all points are properly formed
+      const validPoints = shape.points.filter(p =>
+        p &&
+        typeof p === 'object' &&
+        typeof p.x === 'number' &&
+        typeof p.y === 'number' &&
+        !isNaN(p.x) &&
+        !isNaN(p.y) &&
+        isFinite(p.x) &&
+        isFinite(p.y)
       );
 
-      return hasValidPoints;
+      if (validPoints.length === 0) {
+        console.warn("Invalid shape: no valid points", shape);
+        return false;
+      }
+
+      // If some points were invalid, log warning but keep shape if it has valid points
+      if (validPoints.length !== shape.points.length) {
+        console.warn(`Shape ${shape.id} had ${shape.points.length - validPoints.length} invalid points, cleaning up`);
+        shape.points = validPoints; // Clean up the points in place
+      }
+
+      // Validate other essential properties
+      if (!shape.color || typeof shape.color !== 'string') {
+        console.warn("Invalid shape: missing or invalid color", shape);
+        return false;
+      }
+
+      if (!shape.strokeWidth || typeof shape.strokeWidth !== 'number' || shape.strokeWidth <= 0) {
+        console.warn("Invalid shape: invalid strokeWidth", shape);
+        return false;
+      }
+
+      return true;
     });
   }, []);
 
-  // Periodic validation of shapes to prevent corruption (client-side only)
+  // Enhanced periodic validation of shapes to prevent corruption (client-side only)
   useEffect(() => {
     // Only run on client side
     if (typeof window === 'undefined') return;
 
     const interval = setInterval(() => {
       setShapes(prevShapes => {
-        const validatedShapes = validateShapes(prevShapes);
-        if (validatedShapes.length !== prevShapes.length) {
-          console.warn(`Cleaned up ${prevShapes.length - validatedShapes.length} invalid shapes`);
+        if (!Array.isArray(prevShapes)) {
+          console.warn("Shapes array is not valid, resetting to empty array");
+          return [];
         }
+
+        const validatedShapes = validateShapes(prevShapes);
+        const removedCount = prevShapes.length - validatedShapes.length;
+
+        if (removedCount > 0) {
+          console.warn(`Cleaned up ${removedCount} invalid shapes during periodic validation`);
+          console.log(`Previous shapes count: ${prevShapes.length}, Valid shapes count: ${validatedShapes.length}`);
+        }
+
         return validatedShapes;
       });
-    }, 10000); // Validate every 10 seconds (less frequent)
+    }, 5000); // Validate every 5 seconds (more frequent to catch bugs early)
 
     return () => clearInterval(interval);
   }, [validateShapes]);
 
+  // Additional validation on window focus/visibility change to catch potential corruption
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        setShapes(prevShapes => {
+          if (!Array.isArray(prevShapes)) {
+            console.warn("Shapes array corrupted on visibility change, resetting");
+            return [];
+          }
+          return validateShapes(prevShapes);
+        });
+      }
+    };
+
+    const handleFocus = () => {
+      setShapes(prevShapes => {
+        if (!Array.isArray(prevShapes)) {
+          console.warn("Shapes array corrupted on window focus, resetting");
+          return [];
+        }
+        return validateShapes(prevShapes);
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [validateShapes]);
+
   const addShape = (shape: Shape) => {
-    // Validate shape before adding
-    if (!shape || !shape.id || !shape.points || shape.points.length === 0) {
-      console.warn("Invalid shape, not adding:", shape);
+    // Comprehensive shape validation before adding
+    if (!shape) {
+      console.warn("Attempted to add null/undefined shape");
       return;
     }
 
-    // Validate points
-    const validPoints = shape.points.filter(p => p && typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x) && !isNaN(p.y));
+    if (!shape.id || typeof shape.id !== 'string') {
+      console.warn("Shape missing valid id:", shape);
+      return;
+    }
+
+    if (!shape.type || typeof shape.type !== 'string') {
+      console.warn("Shape missing valid type:", shape);
+      return;
+    }
+
+    if (!shape.points || !Array.isArray(shape.points)) {
+      console.warn("Shape missing valid points array:", shape);
+      return;
+    }
+
+    // Validate and clean points
+    const validPoints = shape.points.filter(p =>
+      p &&
+      typeof p === 'object' &&
+      typeof p.x === 'number' &&
+      typeof p.y === 'number' &&
+      !isNaN(p.x) &&
+      !isNaN(p.y) &&
+      isFinite(p.x) &&
+      isFinite(p.y)
+    );
+
     if (validPoints.length === 0) {
       console.warn("Shape has no valid points, not adding:", shape);
       return;
     }
 
-    const validShape = {
+    // Validate other essential properties
+    if (!shape.color || typeof shape.color !== 'string') {
+      console.warn("Shape missing valid color:", shape);
+      return;
+    }
+
+    if (!shape.strokeWidth || typeof shape.strokeWidth !== 'number' || shape.strokeWidth <= 0) {
+      console.warn("Shape missing valid strokeWidth:", shape);
+      return;
+    }
+
+    // Create valid shape by cloning and validating the original
+    const validShape: Shape = {
       ...shape,
       points: validPoints,
-      bounds: calculateBounds(shape)
+      bounds: calculateBounds(shape) || undefined
     };
 
-    setShapes((prev) : Shape[] => {
-      const newShapes = [...prev, validShape];
+    setShapes((prev) => {
+      // Ensure prev is a valid array
+      const prevShapes = Array.isArray(prev) ? prev : [];
+
+      // Check for duplicate IDs and replace if found
+      const existingIndex = prevShapes.findIndex(s => s && s.id === shape.id);
+      let newShapes: Shape[];
+
+      if (existingIndex !== -1) {
+        console.warn(`Shape with id ${shape.id} already exists, replacing`);
+        newShapes = [...prevShapes];
+        newShapes[existingIndex] = validShape;
+      } else {
+        newShapes = [...prevShapes, validShape];
+      }
+
       // Hide welcome message when first shape is added
-      if (prev.length === 0 && newShapes.length > 0) {
+      if (prevShapes.length === 0 && newShapes.length > 0) {
         setShowWelcome(false);
       }
-      // Validate final array - remove any invalid shapes
-      return newShapes.filter(s => s && s.id && s.points && s.points.length > 0) as Shape[];
+
+      // Final validation of the entire array
+      return validateShapes(newShapes);
     });
   };
 
   const removeShape = (shapeId: string) => {
-    setShapes((prev) => prev.filter((shape) => shape.id !== shapeId));
+    setShapes((prev) => {
+      // Ensure prev is a valid array
+      const prevShapes = Array.isArray(prev) ? prev : [];
+
+      // Filter out the shape with matching ID
+      const filteredShapes = prevShapes.filter((shape) =>
+        shape && shape.id && shape.id !== shapeId
+      );
+
+      // Validate the resulting array
+      return validateShapes(filteredShapes);
+    });
   };
 
   const updateShape = (
@@ -509,20 +741,48 @@ export default function DrawingCanvas() {
     imageWidth?: number,
     imageHeight?: number
   ) => {
-    setShapes((prev) =>
-      prev.map((shape) => {
+    setShapes((prev) => {
+      // Ensure prev is a valid array
+      const prevShapes = Array.isArray(prev) ? prev : [];
+
+      const updatedShapes = prevShapes.map((shape) => {
+        if (!shape || !shape.id) return shape;
+
         if (shape.id === shapeId) {
-          const updatedShape = { ...shape, points };
+          // Validate the new points
+          const validPoints = points.filter(p =>
+            p &&
+            typeof p === 'object' &&
+            typeof p.x === 'number' &&
+            typeof p.y === 'number' &&
+            !isNaN(p.x) &&
+            !isNaN(p.y) &&
+            isFinite(p.x) &&
+            isFinite(p.y)
+          );
+
+          if (validPoints.length === 0) {
+            console.warn(`Cannot update shape ${shapeId}: no valid points provided`);
+            return shape; // Return original shape if points are invalid
+          }
+
+          const updatedShape = {
+            ...shape,
+            points: validPoints,
+            bounds: calculateBounds(shape) || undefined
+          };
+
           if (imageWidth !== undefined) updatedShape.imageWidth = imageWidth;
           if (imageHeight !== undefined) updatedShape.imageHeight = imageHeight;
-          updatedShape.bounds = calculateBounds(
-            updatedShape
-          ) as Shape["bounds"];
+
           return updatedShape;
         }
         return shape;
-      })
-    );
+      });
+
+      // Validate the resulting array
+      return validateShapes(updatedShapes);
+    });
   };
 
   const updateShapeFully = (shapeId: string, newShape: Shape) => {
@@ -1472,9 +1732,9 @@ export default function DrawingCanvas() {
       return;
     }
 
-    // Set drawing properties with validation
+    // Set drawing properties with validation - moderately thicker lines
     ctx.strokeStyle = shape.color || '#000000';
-    ctx.lineWidth = Math.max(1, Math.min(50, shape.strokeWidth || 2));
+    ctx.lineWidth = Math.max(2, Math.min(40, (shape.strokeWidth || 2) * 1.8)); // Moderately thicker lines
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
@@ -1491,18 +1751,63 @@ export default function DrawingCanvas() {
       );
     } else if (shape.type === "line") {
       if (shape.points.length < 2) return;
-      ctx.beginPath();
-      ctx.moveTo(shape.points[0].x, shape.points[0].y);
-      ctx.lineTo(
-        shape.points[shape.points.length - 1].x,
-        shape.points[shape.points.length - 1].y
+
+      // Create wavy line effect for hand-drawn appearance - much more segments
+      const wavyPoints = createWavyLine(
+        shape.points[0],
+        shape.points[shape.points.length - 1],
+        Math.max(3, Math.min(8, Math.floor(Math.random() * 4) + 4)) // More segments for more cartoonish effect
       );
+
+      ctx.beginPath();
+      ctx.moveTo(wavyPoints[0].x, wavyPoints[0].y);
+
+      // Draw wavy line using quadratic curves for smoothness
+      for (let i = 1; i < wavyPoints.length - 1; i++) {
+        const xc = (wavyPoints[i].x + wavyPoints[i + 1].x) / 2;
+        const yc = (wavyPoints[i].y + wavyPoints[i + 1].y) / 2;
+        ctx.quadraticCurveTo(wavyPoints[i].x, wavyPoints[i].y, xc, yc);
+      }
+
+      // Last segment
+      if (wavyPoints.length > 1) {
+        ctx.lineTo(wavyPoints[wavyPoints.length - 1].x, wavyPoints[wavyPoints.length - 1].y);
+      }
+
       ctx.stroke();
     } else if (shape.type === "rectangle") {
       if (shape.points.length < 2) return;
       const start = shape.points[0];
       const end = shape.points[shape.points.length - 1];
-      ctx.strokeRect(start.x, start.y, end.x - start.x, end.y - start.y);
+
+      // Create rough rectangle points
+      const rectPoints = [
+        start,
+        { x: end.x, y: start.y },
+        end,
+        { x: start.x, y: end.y },
+        start
+      ];
+
+      // Add roughness to each side
+      const roughRectPoints = addRoughnessToPoints(rectPoints, 2);
+
+      ctx.beginPath();
+      ctx.moveTo(roughRectPoints[0].x, roughRectPoints[0].y);
+      for (let i = 1; i < roughRectPoints.length; i++) {
+        ctx.lineTo(roughRectPoints[i].x, roughRectPoints[i].y);
+      }
+      ctx.stroke();
+
+      // Draw second time for sketchy effect
+      ctx.globalAlpha = 0.4;
+      ctx.beginPath();
+      ctx.moveTo(roughRectPoints[0].x + 1, roughRectPoints[0].y - 1);
+      for (let i = 1; i < roughRectPoints.length; i++) {
+        ctx.lineTo(roughRectPoints[i].x + 1, roughRectPoints[i].y - 1);
+      }
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     } else if (shape.type === "circle") {
       if (shape.points.length < 2) return;
       const start = shape.points[0];
@@ -1510,8 +1815,27 @@ export default function DrawingCanvas() {
       const radius = Math.sqrt(
         Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
       );
+
+      // Create rough circle with multiple small segments
+      const segments = 20;
+      const circlePoints: Point[] = [];
+
+      for (let i = 0; i <= segments; i++) {
+        const angle = (i / segments) * 2 * Math.PI;
+        const x = start.x + Math.cos(angle) * radius;
+        const y = start.y + Math.sin(angle) * radius;
+        circlePoints.push({ x, y });
+      }
+
+      // Add roughness to circle
+      const roughCirclePoints = addRoughnessToPoints(circlePoints, 1.5);
+
       ctx.beginPath();
-      ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
+      ctx.moveTo(roughCirclePoints[0].x, roughCirclePoints[0].y);
+      for (let i = 1; i < roughCirclePoints.length; i++) {
+        ctx.lineTo(roughCirclePoints[i].x, roughCirclePoints[i].y);
+      }
+      ctx.closePath();
       ctx.stroke();
     } else if (shape.type === "text" && shape.text) {
       const fontSize = Math.max(12, getFontSize(shape.strokeWidth * 8)); // Ensure minimum readable font size
@@ -1742,7 +2066,7 @@ export default function DrawingCanvas() {
       Math.max(0, Math.min(1, rough)) * Math.max(0.2, width * 0.2)
     );
     ctx.strokeStyle = color;
-    ctx.lineWidth = width;
+    ctx.lineWidth = width * 1.8; // Moderately thicker pencil strokes
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.beginPath();
@@ -1783,8 +2107,8 @@ export default function DrawingCanvas() {
   const applyJitter = (pts: Point[], amount: number): Point[] => {
     if (amount <= 0) return pts.slice();
     return pts.map((p) => ({
-      x: p.x + (Math.random() - 0.5) * amount,
-      y: p.y + (Math.random() - 0.5) * amount,
+      x: p.x + (Math.random() - 0.5) * amount * 2, // Much more jitter
+      y: p.y + (Math.random() - 0.5) * amount * 2,
     }));
   };
 
@@ -3278,28 +3602,28 @@ const endPinchZoom = () => {
           {/* Welcome Message */}
           {showWelcome && shapes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-              <div className="text-center px-12 py-16 max-w-2xl mx-4">
+              <div className="text-center px-12 py-20 max-w-2xl mx-4">
                 {/* Sample curved line - inspired by the image */}
-                <div className="mb-12 flex justify-center">
-                  <svg width="200" height="80" viewBox="0 0 200 80" className="opacity-40">
+                <div className="ml-14 sm:ml-0 mb-24 flex justify-center">
+                  <svg width="400" height="120" viewBox="0 0 200 80" 
+                  className="opacity-40 sm:w-[80rem] sm:h-[96rem]">
                     <path
                       d="M 20 40 Q 60 10, 100 40 T 180 40"
                       stroke="#1e293b"
                       strokeWidth="2"
                       fill="none"
-                      strokeLinecap="round"
+                      strokeLinecap="round" 
                     />
                   </svg>
                 </div>
 
                 {/* Main title - very minimal */}
                 <div className="text-sm font-light text-gray-800 tracking-wide mb-8" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                  Welcome to your canvas
+                  
                 </div>
 
                 {/* Subtle hint */}
                 <div className="text-xs text-gray-500 font-light opacity-50 tracking-wider">
-                  START ANYWHERE
                 </div>
               </div>
             </div>
