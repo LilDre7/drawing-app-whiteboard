@@ -338,6 +338,11 @@ export default function DrawingCanvas() {
   const [zoom, setZoom] = useState(100);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
 
+  // Estados para pinch-to-zoom
+  const [isPinching, setIsPinching] = useState(false);
+  const [lastTouchDistance, setLastTouchDistance] = useState(0);
+  const [pinchCenter, setPinchCenter] = useState({ x: 0, y: 0 });
+
   const [projectTitle, setProjectTitle] = useState("Untitled Project");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -601,6 +606,14 @@ export default function DrawingCanvas() {
   useEffect(() => {
     requestRender();
   }, [shapes, selectedShapeId, zoom, panOffset, draggedShape]);
+
+  // Limpiar estado de pinch al desmontar
+  useEffect(() => {
+    return () => {
+      setIsPinching(false);
+      setLastTouchDistance(0);
+    };
+  }, []);
 
   // Calculate the bounds of the shape
   const calculateBounds = (shape: Shape) => {
@@ -2574,12 +2587,65 @@ export default function DrawingCanvas() {
 
   // Zoom in the canvas
   const handleZoomIn = () => {
-    setZoom(Math.min(zoom + 10, 200));
+    setZoom(Math.min(zoom + 10, 400));
     requestRender();
   };
   // Zoom out the canvas
   const handleZoomOut = () => {
     setZoom(Math.max(zoom - 10, 50));
+    requestRender();
+  };
+
+  // Funciones para pinch-to-zoom
+  const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+
+  const getTouchCenter = (touch1: React.Touch, touch2: React.Touch): { x: number; y: number } => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
+  };
+
+  const handlePinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+    const currentDistance = getTouchDistance(touch1, touch2);
+    const center = getTouchCenter(touch1, touch2);
+
+    if (lastTouchDistance === 0) {
+      setLastTouchDistance(currentDistance);
+      setPinchCenter(center);
+      return;
+    }
+
+    const scale = currentDistance / lastTouchDistance;
+    const newZoom = Math.min(Math.max(zoom * scale, 50), 400); // Límites: 0.5x a 4x (50% a 400%)
+
+    // Calcular el ajuste de pan para mantener el zoom centrado en el punto de pinch
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const scaleChange = newZoom / zoom;
+
+      // Convertir el centro del pinch a coordenadas del canvas antes del zoom
+      const viewportOffsetX = viewportSizeRef.current.width / 2;
+      const viewportOffsetY = viewportSizeRef.current.height / 2;
+
+      const canvasX = (center.x - rect.left - panOffset.x) / (zoom / 100) - viewportOffsetX;
+      const canvasY = (center.y - rect.top - panOffset.y) / (zoom / 100) - viewportOffsetY;
+
+      // Calcular nueva posición del pan para mantener el punto centrado
+      const newPanX = center.x - rect.left - (canvasX + viewportOffsetX) * (newZoom / 100);
+      const newPanY = center.y - rect.top - (canvasY + viewportOffsetY) * (newZoom / 100);
+
+      setPanOffset({ x: newPanX, y: newPanY });
+    }
+
+    setZoom(newZoom);
+    setLastTouchDistance(currentDistance);
+    setPinchCenter(center);
     requestRender();
   };
 
@@ -2892,7 +2958,9 @@ export default function DrawingCanvas() {
             ref={canvasRef}
             className={cn(
               "h-full w-full touch-none",
-              tool === "hand"
+              isPinching
+                ? "cursor-zoom-in"
+                : tool === "hand"
                 ? isPanning
                   ? "cursor-grabbing"
                   : "cursor-grab"
@@ -2904,25 +2972,61 @@ export default function DrawingCanvas() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            // Event handlers táctiles mejorados para móvil
+            // Event handlers táctiles mejorados para móvil con pinch-to-zoom
             onTouchStart={(e) => {
               e.preventDefault();
-              handleMouseDown(e);
+
+              // Detectar gesto de pinch (dos dedos)
+              if (e.touches.length === 2) {
+                setIsPinching(true);
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+                setLastTouchDistance(getTouchDistance(touch1, touch2));
+                setPinchCenter(getTouchCenter(touch1, touch2));
+                return;
+              }
+
+              // Si no es pinch, manejar como toque normal para dibujar
+              if (e.touches.length === 1 && !isPinching) {
+                handleMouseDown(e);
+              }
             }}
             onTouchMove={(e) => {
               e.preventDefault();
-              const touch = e.touches[0];
-              if (touch) {
-                handleMouseMove({
-                  ...e,
-                  clientX: touch.clientX,
-                  clientY: touch.clientY,
-                } as unknown as React.MouseEvent<HTMLCanvasElement>);
+
+              // Manejar gesto de pinch
+              if (e.touches.length === 2 && isPinching) {
+                const touch1 = e.touches[0];
+                const touch2 = e.touches[1];
+                handlePinchZoom(touch1, touch2);
+                return;
+              }
+
+              // Si no es pinch, manejar como toque normal para dibujar
+              if (e.touches.length === 1 && !isPinching) {
+                const touch = e.touches[0];
+                if (touch) {
+                  handleMouseMove({
+                    ...e,
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                  } as unknown as React.MouseEvent<HTMLCanvasElement>);
+                }
               }
             }}
             onTouchEnd={(e) => {
               e.preventDefault();
-              handleMouseUp();
+
+              // Finalizar gesture de pinch si quedan menos de 2 dedos
+              if (e.touches.length < 2) {
+                setIsPinching(false);
+                setLastTouchDistance(0);
+              }
+
+              // Manejar fin de dibujo si no está en modo pinch
+              if (!isPinching && e.touches.length === 0) {
+                handleMouseUp();
+              }
             }}
           />
 
@@ -3311,7 +3415,7 @@ export default function DrawingCanvas() {
         </div>
 
         {/* History controls - Mobile bottom */}
-        <div className="absolute top-18 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
+        <div className="absolute top-0 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -3335,7 +3439,7 @@ export default function DrawingCanvas() {
         </div>
 
         {/* Zoom controls - Bottom on all screens */}
-        <div className="absolute top-4 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:top-auto sm:bottom-6 sm:left-auto sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
+        <div className="hidden md:flex absolute top-4 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:top-auto sm:bottom-6 sm:left-auto sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
           <Button
             variant="ghost"
             size="icon"
