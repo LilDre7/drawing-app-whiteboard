@@ -338,17 +338,20 @@ export default function DrawingCanvas() {
   const [zoom, setZoom] = useState(100);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
 
-  // Estados para pinch-to-zoom
+  // Estados para pinch-to-zoom mejorado
   const [isPinching, setIsPinching] = useState(false);
-  const [lastTouchDistance, setLastTouchDistance] = useState(0);
-  const [pinchCenter, setPinchCenter] = useState({ x: 0, y: 0 });
+  const [initialTouchDistance, setInitialTouchDistance] = useState(0); // Distancia inicial entre dedos
+  const [lastTouchDistance, setLastTouchDistance] = useState(0); // Última distancia calculada
+  const [pinchCenter, setPinchCenter] = useState({ x: 0, y: 0 }); // Punto medio entre dedos
+  const [initialScale, setInitialScale] = useState(1); // Escala inicial cuando comienza el pinch
+  const pinchAnimationRef = useRef<number>(undefined); // Referencia para requestAnimationFrame
 
   const [projectTitle, setProjectTitle] = useState("Untitled Project");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
+  const [isPanning, setIsPanning] = useState(false)
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
 
   // Calculate screen position from canvas coordinates (relative to canvas container)
@@ -607,11 +610,17 @@ export default function DrawingCanvas() {
     requestRender();
   }, [shapes, selectedShapeId, zoom, panOffset, draggedShape]);
 
-  // Limpiar estado de pinch al desmontar
+  // Limpiar estado de pinch y animaciones al desmontar
   useEffect(() => {
     return () => {
-      setIsPinching(false);
-      setLastTouchDistance(0);
+      // Finalizar gesture de pinch
+      endPinchZoom();
+
+      // Cancelar cualquier animación pendiente
+      if (pinchAnimationRef.current) {
+        cancelAnimationFrame(pinchAnimationRef.current);
+        pinchAnimationRef.current = null as unknown as number;
+      }
     };
   }, []);
 
@@ -2596,58 +2605,163 @@ export default function DrawingCanvas() {
     requestRender();
   };
 
-  // Funciones para pinch-to-zoom
-  const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
-    const dx = touch1.clientX - touch2.clientX;
-    const dy = touch1.clientY - touch2.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
+  /**
+ * Calcula la distancia euclidiana entre dos puntos táctiles
+ * @param touch1 Primer toque
+ * @param touch2 Segundo toque
+ * @returns Distancia en píxeles
+ */
+const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
+  const dx = touch1.clientX - touch2.clientX;
+  const dy = touch1.clientY - touch2.clientY;
+  return Math.sqrt(dx * dx + dy * dy);
+};
 
-  const getTouchCenter = (touch1: React.Touch, touch2: React.Touch): { x: number; y: number } => {
-    return {
-      x: (touch1.clientX + touch2.clientX) / 2,
-      y: (touch1.clientY + touch2.clientY) / 2,
-    };
+/**
+ * Calcula el punto medio entre dos toques
+ * @param touch1 Primer toque
+ * @param touch2 Segundo toque
+ * @returns Coordenadas del punto medio
+ */
+const getTouchCenter = (touch1: React.Touch, touch2: React.Touch): { x: number; y: number } => {
+  return {
+    x: (touch1.clientX + touch2.clientX) / 2,
+    y: (touch1.clientY + touch2.clientY) / 2,
   };
+};
 
-  const handlePinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+/**
+ * Restringe un valor entre un mínimo y un máximo (clamp function)
+ * @param value Valor a restringir
+ * @param min Valor mínimo
+ * @param max Valor máximo
+ * @returns Valor restringido
+ */
+const clamp = (value: number, min: number, max: number): number => {
+  return Math.min(Math.max(value, min), max);
+};
+
+/**
+ * Inicia el gesto de pinch-to-zoom
+ * @param touch1 Primer dedo
+ * @param touch2 Segundo dedo
+ */
+const startPinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+  const distance = getTouchDistance(touch1, touch2);
+  const center = getTouchCenter(touch1, touch2);
+
+  // Guardar estado inicial del gesto
+  setInitialTouchDistance(distance);
+  setLastTouchDistance(distance);
+  setPinchCenter(center);
+  setInitialScale(zoom / 100); // Convertir zoom de porcentaje a escala decimal
+  setIsPinching(true);
+};
+
+/**
+ * Aplica el zoom de forma suave usando requestAnimationFrame
+ * @param touch1 Primer dedo
+ * @param touch2 Segundo dedo
+ */
+const applySmoothPinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+  // Cancelar animación anterior si existe
+  if (pinchAnimationRef.current) {
+    cancelAnimationFrame(pinchAnimationRef.current);
+  }
+
+  const animate = () => {
     const currentDistance = getTouchDistance(touch1, touch2);
     const center = getTouchCenter(touch1, touch2);
 
-    if (lastTouchDistance === 0) {
-      setLastTouchDistance(currentDistance);
-      setPinchCenter(center);
-      return;
-    }
+    // Calcular factor de zoom basado en la distancia inicial vs actual
+    const zoomFactor = currentDistance / initialTouchDistance;
 
-    const scale = currentDistance / lastTouchDistance;
-    const newZoom = Math.min(Math.max(zoom * scale, 50), 400); // Límites: 0.5x a 4x (50% a 400%)
+    // Aplicar factor de zoom a la escala inicial y restringir entre límites
+    const newScale = clamp(initialScale * zoomFactor, 0.5, 4.0);
+    const newZoom = newScale * 100; // Convertir de escala decimal a porcentaje
 
-    // Calcular el ajuste de pan para mantener el zoom centrado en el punto de pinch
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const rect = canvas.getBoundingClientRect();
-      const scaleChange = newZoom / zoom;
-
-      // Convertir el centro del pinch a coordenadas del canvas antes del zoom
-      const viewportOffsetX = viewportSizeRef.current.width / 2;
-      const viewportOffsetY = viewportSizeRef.current.height / 2;
-
-      const canvasX = (center.x - rect.left - panOffset.x) / (zoom / 100) - viewportOffsetX;
-      const canvasY = (center.y - rect.top - panOffset.y) / (zoom / 100) - viewportOffsetY;
-
-      // Calcular nueva posición del pan para mantener el punto centrado
-      const newPanX = center.x - rect.left - (canvasX + viewportOffsetX) * (newZoom / 100);
-      const newPanY = center.y - rect.top - (canvasY + viewportOffsetY) * (newZoom / 100);
-
-      setPanOffset({ x: newPanX, y: newPanY });
-    }
-
-    setZoom(newZoom);
+    // Actualizar último distancia para siguiente frame
     setLastTouchDistance(currentDistance);
     setPinchCenter(center);
-    requestRender();
+
+    // Calcular ajuste de pan para mantener el zoom centrado
+    updatePanForZoom(center, newZoom);
+
+    // Aplicar nuevo zoom
+    setZoom(newZoom);
+
+    // Continuar animación si sigue en modo pinch
+    if (isPinching) {
+      requestRender();
+    }
   };
+
+  // Ejecutar animación
+  pinchAnimationRef.current = requestAnimationFrame(animate);
+};
+
+/**
+ * Actualiza el pan (desplazamiento) para mantener el zoom centrado en el punto especificado
+ * @param zoomCenter Punto central del zoom en coordenadas de pantalla
+ * @param newZoom Nuevo nivel de zoom en porcentaje
+ */
+const updatePanForZoom = (zoomCenter: { x: number; y: number }, newZoom: number) => {
+  const canvas = canvasRef.current;
+  if (!canvas) return;
+
+  const rect = canvas.getBoundingClientRect();
+
+  // Calcular offsets del viewport
+  const viewportOffsetX = viewportSizeRef.current.width / 2;
+  const viewportOffsetY = viewportSizeRef.current.height / 2;
+
+  // Convertir coordenadas de pantalla a coordenadas del canvas antes del zoom
+  const currentScale = zoom / 100;
+  const newScale = newZoom / 100;
+
+  // Punto en coordenadas del canvas antes del zoom
+  const canvasPointX = (zoomCenter.x - rect.left - panOffset.x) / currentScale - viewportOffsetX;
+  const canvasPointY = (zoomCenter.y - rect.top - panOffset.y) / currentScale - viewportOffsetY;
+
+  // Calcular nueva posición de pan para mantener el punto fijo durante el zoom
+  const newPanX = zoomCenter.x - rect.left - (canvasPointX + viewportOffsetX) * newScale;
+  const newPanY = zoomCenter.y - rect.top - (canvasPointY + viewportOffsetY) * newScale;
+
+  setPanOffset({ x: newPanX, y: newPanY });
+};
+
+/**
+ * Maneja el gesto de pinch-to-zoom durante el movimiento
+ * @param touch1 Primer dedo
+ * @param touch2 Segundo dedo
+ */
+const handlePinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+  if (!isPinching) return;
+
+  const currentDistance = getTouchDistance(touch1, touch2);
+  const center = getTouchCenter(touch1, touch2);
+
+  // Aplicar zoom de forma suave
+  applySmoothPinchZoom(touch1, touch2);
+};
+
+/**
+ * Finaliza el gesto de pinch-to-zoom
+ */
+const endPinchZoom = () => {
+  setIsPinching(false);
+
+  // Cancelar cualquier animación pendiente
+  if (pinchAnimationRef.current) {
+    cancelAnimationFrame(pinchAnimationRef.current);
+    pinchAnimationRef.current = undefined;
+  }
+
+  // Resetear estados
+  setInitialTouchDistance(0);
+  setLastTouchDistance(0);
+  setInitialScale(1);
+};
 
   // Undo the last action
   const handleUndo = () => {
@@ -2972,17 +3086,15 @@ export default function DrawingCanvas() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            // Event handlers táctiles mejorados para móvil con pinch-to-zoom
+            // Event handlers táctiles mejorados para móvil con pinch-to-zoom suave
             onTouchStart={(e) => {
               e.preventDefault();
 
-              // Detectar gesto de pinch (dos dedos)
+              // Detectar gesto de pinch (exactamente dos dedos)
               if (e.touches.length === 2) {
-                setIsPinching(true);
                 const touch1 = e.touches[0];
                 const touch2 = e.touches[1];
-                setLastTouchDistance(getTouchDistance(touch1, touch2));
-                setPinchCenter(getTouchCenter(touch1, touch2));
+                startPinchZoom(touch1, touch2);
                 return;
               }
 
@@ -2994,7 +3106,7 @@ export default function DrawingCanvas() {
             onTouchMove={(e) => {
               e.preventDefault();
 
-              // Manejar gesto de pinch
+              // Manejar gesto de pinch con animación suave
               if (e.touches.length === 2 && isPinching) {
                 const touch1 = e.touches[0];
                 const touch2 = e.touches[1];
@@ -3017,10 +3129,9 @@ export default function DrawingCanvas() {
             onTouchEnd={(e) => {
               e.preventDefault();
 
-              // Finalizar gesture de pinch si quedan menos de 2 dedos
-              if (e.touches.length < 2) {
-                setIsPinching(false);
-                setLastTouchDistance(0);
+              // Finalizar gesto de pinch si quedan menos de 2 dedos
+              if (e.touches.length < 2 && isPinching) {
+                endPinchZoom();
               }
 
               // Manejar fin de dibujo si no está en modo pinch
@@ -3415,7 +3526,7 @@ export default function DrawingCanvas() {
         </div>
 
         {/* History controls - Mobile bottom */}
-        <div className="absolute top-0 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
+        <div className="absolute top-16 right-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
           <Button
             variant="ghost"
             size="icon"
