@@ -22,7 +22,7 @@ export default function DrawingCanvas({ className }: DrawingCanvasProps) {
   // State
   const [tool, setTool] = useState<Tool>("pencil");
   const [color, setColor] = useState("#1e293b");
-  const [strokeWidth, setStrokeWidth] = useState(2);
+  const [strokeWidth, setStrokeWidth] = useState(3);
   const [textSize, setTextSize] = useState(20);
   const [zoom, setZoom] = useState(100);
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
@@ -119,28 +119,37 @@ export default function DrawingCanvas({ className }: DrawingCanvasProps) {
   const drawShape = useCallback((ctx: CanvasRenderingContext2D, shape: Shape) => {
     if (!shape || !shape.points || shape.points.length === 0) return;
 
-    // Set common properties
+    // Set common properties with enhanced line quality
     ctx.strokeStyle = shape.color;
-    ctx.lineWidth = shape.strokeWidth;
+    ctx.lineWidth = shape.strokeWidth * 3; // Increase line thickness by 50%
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
+    ctx.globalAlpha = 0.95; // Slight transparency for smoother blending
 
     if (shape.type === "pencil") {
       if (shape.points.length > 1) {
-        ctx.beginPath();
-        // Use quadratic curves for smoother lines
-        ctx.moveTo(shape.points[0].x, shape.points[0].y);
-        for (let i = 1; i < shape.points.length - 1; i++) {
-          const xc = (shape.points[i].x + shape.points[i + 1].x) / 2;
-          const yc = (shape.points[i].y + shape.points[i + 1].y) / 2;
-          ctx.quadraticCurveTo(shape.points[i].x, shape.points[i].y, xc, yc);
+        // Draw multiple strokes for thicker, smoother appearance
+        for (let pass = 0; pass < 2; pass++) {
+          ctx.beginPath();
+          ctx.globalAlpha = pass === 0 ? 0.6 : 0.95; // Different opacity for each pass
+
+          // Use quadratic curves for ultra-smooth lines
+          ctx.moveTo(shape.points[0].x, shape.points[0].y);
+
+          for (let i = 1; i < shape.points.length - 1; i++) {
+            const xc = (shape.points[i].x + shape.points[i + 1].x) / 2;
+            const yc = (shape.points[i].y + shape.points[i + 1].y) / 2;
+            ctx.quadraticCurveTo(shape.points[i].x, shape.points[i].y, xc, yc);
+          }
+
+          // Last point
+          if (shape.points.length > 1) {
+            const lastPoint = shape.points[shape.points.length - 1];
+            ctx.lineTo(lastPoint.x, lastPoint.y);
+          }
+
+          ctx.stroke();
         }
-        // Last point
-        if (shape.points.length > 1) {
-          const lastPoint = shape.points[shape.points.length - 1];
-          ctx.lineTo(lastPoint.x, lastPoint.y);
-        }
-        ctx.stroke();
       }
     } else if (shape.type === "line" && shape.points.length >= 2) {
       ctx.beginPath();
@@ -205,6 +214,10 @@ export default function DrawingCanvas({ className }: DrawingCanvasProps) {
     // Set better rendering properties
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = 'high';
+
+    // Additional smoothing for canvas rendering
+    ctx.shadowBlur = 0.3;
+    ctx.shadowColor = 'transparent';
 
     // Draw shapes with better performance
     if (shapes.length > 0) {
@@ -579,7 +592,7 @@ export default function DrawingCanvas({ className }: DrawingCanvasProps) {
   }, [handleUndo, handleRedo, handleDownload]);
 
   return (
-    <div ref={containerRef} className={cn("relative w-full h-full bg-white", className)}>
+    <div ref={containerRef} className={cn("relative w-full h-full", className)}>
       {/* Main Canvas */}
       <canvas
         ref={canvasRef}

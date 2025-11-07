@@ -93,9 +93,9 @@ export function Toolbar({
   ] as const;
 
   return (
-    <div className="absolute top-4 left-4 bg-white rounded-lg shadow-lg border border-gray-200 p-2 flex flex-col gap-2 z-10">
+    <div className="absolute top-4 left-4 bg-white/90 backdrop-blur-sm rounded-lg shadow-lg border border-gray-200/50 p-2 flex flex-col gap-2 z-10">
       {/* Title */}
-      <div className="border-b border-gray-200 pb-2 mb-2">
+      <div className="border-b border-gray-200/50 pb-2 mb-2">
         {isEditingTitle ? (
           <div className="flex items-center gap-2">
             <input
@@ -113,7 +113,7 @@ export function Toolbar({
           </div>
         ) : (
           <div
-            className="text-sm font-medium px-2 py-1 cursor-pointer hover:bg-gray-100 rounded"
+            className="text-sm font-medium px-2 py-1 cursor-pointer hover:bg-gray-100/50 rounded"
             onClick={onTitleEdit}
           >
             {projectTitle}
@@ -136,7 +136,7 @@ export function Toolbar({
         ))}
       </div>
 
-      <div className="border-t border-gray-200 pt-2 flex flex-col gap-2">
+      <div className="border-t border-gray-200/50 pt-2 flex flex-col gap-2">
         {/* Color */}
         <div className="flex items-center gap-2 px-2">
           <input
@@ -157,7 +157,7 @@ export function Toolbar({
               max="20"
               value={strokeWidth}
               onChange={(e) => onStrokeWidthChange(Number(e.target.value))}
-              className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-1 bg-gray-200/50 rounded-lg appearance-none cursor-pointer"
               title="Grosor"
             />
           </div>
@@ -172,7 +172,7 @@ export function Toolbar({
               max="72"
               value={textSize}
               onChange={(e) => onTextSizeChange(Number(e.target.value))}
-              className="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              className="w-full h-1 bg-gray-200/50 rounded-lg appearance-none cursor-pointer"
               title="Tamaño de texto"
             />
           </div>

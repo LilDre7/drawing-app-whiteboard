@@ -2,7 +2,7 @@
 
 import type React from "react";
 
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Pencil,
@@ -332,6 +332,7 @@ export default function DrawingCanvas() {
   const [isDrawing, setIsDrawing] = useState(false);
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
+  const [showWelcome, setShowWelcome] = useState(true);
   const [color, setColor] = useState("#1e293b");
   const [strokeWidth, setStrokeWidth] = useState(2);
   const [textSize, setTextSize] = useState(20); // Tamaño de fuente específico para texto
@@ -411,9 +412,91 @@ export default function DrawingCanvas() {
   const [commandIndex, setCommandIndex] = useState(-1);
   const MAX_COMMANDS = 100; // Límite de comandos para manejar memoria
 
+  // Funny welcome messages
+  const welcomeMessages = [
+    "Your canvas is ready to make some magic! ✨",
+    "Time to create something... or just doodle. We won't judge. 😎",
+    "Welcome! Your masterpiece starts with that first awkward line. 🎨",
+    "Let's get creative! (Or at least entertain ourselves for 5 minutes) 🖌️",
+    "Ready to draw the next Mona Lisa... or another cat. We're not picky. 🐱",
+    "Your canvas awaits! Warning: may cause sudden bursts of creativity 🌟",
+    "Time to make art! Or beautiful mistakes. Those count too, right? 🎭",
+    "Welcome! Let's create something that makes your friends say 'Wow!' or 'Huh?' 🤔",
+    "Your digital canvas is ready! Go wild or draw tiny circles. Whatever works. 🌀",
+    "Ready to unleash your inner artist? Or your inner procrastinator? Both are valid. 🎪"
+  ];
+
+  const getRandomWelcomeMessage = () => {
+    return welcomeMessages[Math.floor(Math.random() * welcomeMessages.length)];
+  };
+
+  const [welcomeMessage] = useState(getRandomWelcomeMessage());
+
   // Helper functions for shape manipulation
+
+  // Validate and clean shapes array periodically
+  const validateShapes = useCallback((shapesArray: Shape[]) => {
+    return shapesArray.filter(shape => {
+      if (!shape || !shape.id || !shape.points || shape.points.length === 0) {
+        return false;
+      }
+
+      // Check if all points are valid
+      const hasValidPoints = shape.points.some(p =>
+        p && typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x) && !isNaN(p.y)
+      );
+
+      return hasValidPoints;
+    });
+  }, []);
+
+  // Periodic validation of shapes to prevent corruption (client-side only)
+  useEffect(() => {
+    // Only run on client side
+    if (typeof window === 'undefined') return;
+
+    const interval = setInterval(() => {
+      setShapes(prevShapes => {
+        const validatedShapes = validateShapes(prevShapes);
+        if (validatedShapes.length !== prevShapes.length) {
+          console.warn(`Cleaned up ${prevShapes.length - validatedShapes.length} invalid shapes`);
+        }
+        return validatedShapes;
+      });
+    }, 10000); // Validate every 10 seconds (less frequent)
+
+    return () => clearInterval(interval);
+  }, [validateShapes]);
+
   const addShape = (shape: Shape) => {
-    setShapes((prev) => [...prev, shape]);
+    // Validate shape before adding
+    if (!shape || !shape.id || !shape.points || shape.points.length === 0) {
+      console.warn("Invalid shape, not adding:", shape);
+      return;
+    }
+
+    // Validate points
+    const validPoints = shape.points.filter(p => p && typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x) && !isNaN(p.y));
+    if (validPoints.length === 0) {
+      console.warn("Shape has no valid points, not adding:", shape);
+      return;
+    }
+
+    const validShape = {
+      ...shape,
+      points: validPoints,
+      bounds: calculateBounds(shape)
+    };
+
+    setShapes((prev) : Shape[] => {
+      const newShapes = [...prev, validShape];
+      // Hide welcome message when first shape is added
+      if (prev.length === 0 && newShapes.length > 0) {
+        setShowWelcome(false);
+      }
+      // Validate final array - remove any invalid shapes
+      return newShapes.filter(s => s && s.id && s.points && s.points.length > 0) as Shape[];
+    });
   };
 
   const removeShape = (shapeId: string) => {
@@ -1369,12 +1452,36 @@ export default function DrawingCanvas() {
     shape: Shape,
     isSelected: boolean
   ) => {
-    ctx.strokeStyle = shape.color;
-    ctx.lineWidth = shape.strokeWidth;
+    // Validate shape before drawing
+    if (!shape || !shape.points || shape.points.length === 0) {
+      return;
+    }
+
+    // Validate all points have valid coordinates
+    const validPoints = shape.points.filter(p =>
+      p &&
+      typeof p.x === 'number' &&
+      typeof p.y === 'number' &&
+      !isNaN(p.x) &&
+      !isNaN(p.y) &&
+      isFinite(p.x) &&
+      isFinite(p.y)
+    );
+
+    if (validPoints.length === 0) {
+      return;
+    }
+
+    // Set drawing properties with validation
+    ctx.strokeStyle = shape.color || '#000000';
+    ctx.lineWidth = Math.max(1, Math.min(50, shape.strokeWidth || 2));
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
 
-    if (shape.type === "pencil") {
+    // Use valid points for drawing
+    const drawingShape = { ...shape, points: validPoints };
+
+    if (drawingShape.type === "pencil") {
       drawPencilStylized(
         ctx,
         shape.points,
@@ -2472,17 +2579,30 @@ export default function DrawingCanvas() {
     }
 
     if (currentShape && isDrawing) {
-      const shapeWithBounds = {
-        ...currentShape,
-        bounds: calculateBounds(currentShape),
-      };
-      const addCommand = createAddShapeCommand(
-        shapeWithBounds as Shape,
-        addShape,
-        removeShape
-      );
-      saveToHistory(addCommand);
-      addCommand.execute();
+      // Additional validation before committing the shape
+      if (currentShape.points && currentShape.points.length > 0) {
+        const validPoints = currentShape.points.filter(p =>
+          p && typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x) && !isNaN(p.y)
+        );
+
+        if (validPoints.length > 0) {
+          const shapeWithBounds = {
+            ...currentShape,
+            points: validPoints,
+            bounds: calculateBounds({ ...currentShape, points: validPoints }),
+          };
+
+          const addCommand = createAddShapeCommand(
+            shapeWithBounds as Shape,
+            addShape,
+            removeShape
+          );
+          saveToHistory(addCommand);
+          addCommand.execute();
+        } else {
+          console.warn("Current shape has no valid points, not adding");
+        }
+      }
       setCurrentShape(null);
     }
 
@@ -2929,7 +3049,7 @@ const endPinchZoom = () => {
   };
 
   return (
-    <div className="flex h-screen flex-col bg-trasnparet mb-4">
+    <div className="flex h-screen flex-col mb-4 bg-transparent">
       <header className="flex h-12 items-center mb-4 border-b dark:bg-slate-950 md:border-0 md:bg-transparent md:px-4 md:pt-4">
         <div className="flex h-full w-full items-center md:gap-3">
           {/* Menu block - Solo en desktop con borde */}
@@ -2942,7 +3062,7 @@ const endPinchZoom = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+              className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100" 
               onClick={handleUndo}
               disabled={commandIndex < 0}
               title="Deshacer"
@@ -3155,6 +3275,36 @@ const endPinchZoom = () => {
             className="hidden"
           />
 
+          {/* Welcome Message */}
+          {showWelcome && shapes.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+              <div className="text-center px-12 py-16 max-w-2xl mx-4">
+                {/* Sample curved line - inspired by the image */}
+                <div className="mb-12 flex justify-center">
+                  <svg width="200" height="80" viewBox="0 0 200 80" className="opacity-40">
+                    <path
+                      d="M 20 40 Q 60 10, 100 40 T 180 40"
+                      stroke="#1e293b"
+                      strokeWidth="2"
+                      fill="none"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </div>
+
+                {/* Main title - very minimal */}
+                <div className="text-sm font-light text-gray-800 tracking-wide mb-8" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+                  Welcome to your canvas
+                </div>
+
+                {/* Subtle hint */}
+                <div className="text-xs text-gray-500 font-light opacity-50 tracking-wider">
+                  START ANYWHERE
+                </div>
+              </div>
+            </div>
+          )}
+
           {isEditingText && (
             <textarea
               ref={textEditor.ref}
@@ -3242,6 +3392,19 @@ const endPinchZoom = () => {
               title="Dibujo libre"
             >
               <Pencil className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-9 w-9 rounded-lg sm:h-10 sm:w-10",
+                tool === "line" &&
+                  "bg-blue-100 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-400"
+              )}
+              onClick={() => setTool("line")}
+              title="Línea"
+            >
+              <Minus className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
             <Button
               variant="ghost"
@@ -3381,6 +3544,19 @@ const endPinchZoom = () => {
               size="icon"
               className={cn(
                 "h-9 w-9 rounded-lg sm:h-10 sm:w-10",
+                tool === "line" &&
+                  "bg-blue-100 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-400"
+              )}
+              onClick={() => setTool("line")}
+              title="Línea"
+            >
+              <Minus className="h-4 w-4 sm:h-5 sm:w-5" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-9 w-9 rounded-lg sm:h-10 sm:w-10",
                 tool === "rectangle" &&
                   "bg-blue-100 text-blue-600 hover:bg-blue-100 dark:bg-blue-950 dark:text-blue-400"
               )}
@@ -3484,7 +3660,7 @@ const endPinchZoom = () => {
               >
                 <Minus className="h-3 w-3" />
               </Button>
-              <span className="min-w-[22px] text-center text-xs font-medium text-black sm:min-w-[24px] sm:text-sm">
+              <span className="min-w-[24px] text-center text-xs font-medium text-black sm:min-w-[24px] sm:text-sm">
                 {textSize}
               </span>
               <Button
