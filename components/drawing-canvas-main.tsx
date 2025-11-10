@@ -1337,8 +1337,6 @@ export default function DrawingCanvas() {
     if (shape.bounds) {
       const handleSize = isTouchEvent ? 12 : 8;
       const bounds = shape.bounds;
-      const padding =
-        shape.type === "rectangle" || shape.type === "circle" ? 5 : 0;
 
       // Check each corner for rectangles and circles
       if (
@@ -1346,35 +1344,37 @@ export default function DrawingCanvas() {
         shape.type === "circle" ||
         shape.type === "image"
       ) {
-        const paddedBounds = {
-          minX: bounds.minX - padding,
-          minY: bounds.minY - padding,
-          maxX: bounds.maxX + padding,
-          maxY: bounds.maxY + padding,
+        // Usar las mismas coordenadas que se usan para dibujar los handles
+        // Los handles se dibujan en bounds.minX - handleSize/2, bounds.minY - handleSize/2, etc.
+        const handlePositions = {
+          nw: { x: bounds.minX - handleSize / 2, y: bounds.minY - handleSize / 2 },
+          ne: { x: bounds.maxX - handleSize / 2, y: bounds.minY - handleSize / 2 },
+          sw: { x: bounds.minX - handleSize / 2, y: bounds.maxY - handleSize / 2 },
+          se: { x: bounds.maxX - handleSize / 2, y: bounds.maxY - handleSize / 2 },
         };
 
-        // Check each corner
+        // Check each corner handle position
         if (
-          Math.abs(point.x - paddedBounds.minX) < handleSize &&
-          Math.abs(point.y - paddedBounds.minY) < handleSize
+          Math.abs(point.x - handlePositions.nw.x) < handleSize &&
+          Math.abs(point.y - handlePositions.nw.y) < handleSize
         ) {
           return "nw";
         }
         if (
-          Math.abs(point.x - paddedBounds.maxX) < handleSize &&
-          Math.abs(point.y - paddedBounds.minY) < handleSize
+          Math.abs(point.x - handlePositions.ne.x) < handleSize &&
+          Math.abs(point.y - handlePositions.ne.y) < handleSize
         ) {
           return "ne";
         }
         if (
-          Math.abs(point.x - paddedBounds.minX) < handleSize &&
-          Math.abs(point.y - paddedBounds.maxY) < handleSize
+          Math.abs(point.x - handlePositions.sw.x) < handleSize &&
+          Math.abs(point.y - handlePositions.sw.y) < handleSize
         ) {
           return "sw";
         }
         if (
-          Math.abs(point.x - paddedBounds.maxX) < handleSize &&
-          Math.abs(point.y - paddedBounds.maxY) < handleSize
+          Math.abs(point.x - handlePositions.se.x) < handleSize &&
+          Math.abs(point.y - handlePositions.se.y) < handleSize
         ) {
           return "se";
         }
