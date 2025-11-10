@@ -55,6 +55,8 @@ function useTextEditor(params: {
     Math.min(screenPosition.y - fontSize - 4, viewport.height - 50)
   );
 
+
+
   // Hide only if completely outside viewport with generous tolerance
   const tolerance = 150; // Allow 150px tolerance outside viewport
   // Use safe fallback values for SSR
@@ -1869,15 +1871,19 @@ export default function DrawingCanvas() {
     }
 
     if (isSelected && shape.bounds) {
+      // Ensure bounds are always in sync with current shape points (especially during dragging)
+      const currentBounds = calculateBounds(shape);
+      const boundsToUse = currentBounds || shape.bounds;
+
       if (shape.type === "text") {
         // Draw rectangular selection that completely surrounds the text
         const padding = 6;
-        const selectionX = shape.bounds.minX - padding;
-        const selectionY = shape.bounds.minY - padding;
+        const selectionX = boundsToUse.minX - padding;
+        const selectionY = boundsToUse.minY - padding;
         const selectionWidth =
-          shape.bounds.maxX - shape.bounds.minX + padding * 2;
+          boundsToUse.maxX - boundsToUse.minX + padding * 2;
         const selectionHeight =
-          shape.bounds.maxY - shape.bounds.minY + padding * 2;
+          boundsToUse.maxY - boundsToUse.minY + padding * 2;
 
         // Draw solid border rectangle
         ctx.strokeStyle = "#ff0000";
@@ -1945,10 +1951,10 @@ export default function DrawingCanvas() {
 
         // Draw the selection rectangle
         ctx.strokeRect(
-          shape.bounds.minX - padding,
-          shape.bounds.minY - padding,
-          shape.bounds.maxX - shape.bounds.minX + padding * 2,
-          shape.bounds.maxY - shape.bounds.minY + padding * 2
+          boundsToUse.minX - padding,
+          boundsToUse.minY - padding,
+          boundsToUse.maxX - boundsToUse.minX + padding * 2,
+          boundsToUse.maxY - boundsToUse.minY + padding * 2
         );
 
         // Add a second dotted line for extra visibility
@@ -1956,10 +1962,10 @@ export default function DrawingCanvas() {
         ctx.lineWidth = 1;
         ctx.setLineDash([4, 8]);
         ctx.strokeRect(
-          shape.bounds.minX - padding - 2,
-          shape.bounds.minY - padding - 2,
-          shape.bounds.maxX - shape.bounds.minX + padding * 2 + 4,
-          shape.bounds.maxY - shape.bounds.minY + padding * 2 + 4
+          boundsToUse.minX - padding - 2,
+          boundsToUse.minY - padding - 2,
+          boundsToUse.maxX - boundsToUse.minX + padding * 2 + 4,
+          boundsToUse.maxY - boundsToUse.minY + padding * 2 + 4
         );
         ctx.setLineDash([]);
 
@@ -1973,26 +1979,26 @@ export default function DrawingCanvas() {
 
           // Draw corner handles with more visibility
           ctx.fillRect(
-            shape.bounds.minX - handleSize / 2,
-            shape.bounds.minY - handleSize / 2,
+            boundsToUse.minX - handleSize / 2,
+            boundsToUse.minY - handleSize / 2,
             handleSize,
             handleSize
           );
           ctx.fillRect(
-            shape.bounds.maxX - handleSize / 2,
-            shape.bounds.minY - handleSize / 2,
+            boundsToUse.maxX - handleSize / 2,
+            boundsToUse.minY - handleSize / 2,
             handleSize,
             handleSize
           );
           ctx.fillRect(
-            shape.bounds.minX - handleSize / 2,
-            shape.bounds.maxY - handleSize / 2,
+            boundsToUse.minX - handleSize / 2,
+            boundsToUse.maxY - handleSize / 2,
             handleSize,
             handleSize
           );
           ctx.fillRect(
-            shape.bounds.maxX - handleSize / 2,
-            shape.bounds.maxY - handleSize / 2,
+            boundsToUse.maxX - handleSize / 2,
+            boundsToUse.maxY - handleSize / 2,
             handleSize,
             handleSize
           );
@@ -2001,26 +2007,26 @@ export default function DrawingCanvas() {
           ctx.fillStyle = "#ffffff";
           const centerHandleSize = 6;
           ctx.fillRect(
-            shape.bounds.minX - centerHandleSize / 2,
-            shape.bounds.minY - centerHandleSize / 2,
+            boundsToUse.minX - centerHandleSize / 2,
+            boundsToUse.minY - centerHandleSize / 2,
             centerHandleSize,
             centerHandleSize
           );
           ctx.fillRect(
-            shape.bounds.maxX - centerHandleSize / 2,
-            shape.bounds.minY - centerHandleSize / 2,
+            boundsToUse.maxX - centerHandleSize / 2,
+            boundsToUse.minY - centerHandleSize / 2,
             centerHandleSize,
             centerHandleSize
           );
           ctx.fillRect(
-            shape.bounds.minX - centerHandleSize / 2,
-            shape.bounds.maxY - centerHandleSize / 2,
+            boundsToUse.minX - centerHandleSize / 2,
+            boundsToUse.maxY - centerHandleSize / 2,
             centerHandleSize,
             centerHandleSize
           );
           ctx.fillRect(
-            shape.bounds.maxX - centerHandleSize / 2,
-            shape.bounds.maxY - centerHandleSize / 2,
+            boundsToUse.maxX - centerHandleSize / 2,
+            boundsToUse.maxY - centerHandleSize / 2,
             centerHandleSize,
             centerHandleSize
           );
