@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function MenuComponent() {
   return (
+  // Section about menu    
     <div className="flex h-full items-center gap-3 px-4">
       <Sheet>
         <SheetTrigger asChild>
