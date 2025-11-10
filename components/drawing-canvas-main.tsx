@@ -4255,7 +4255,7 @@ const endPinchZoom = () => {
         </div>
 
         {/* Zoom controls - Bottom on all screens */}
-        <div className="hidden md:flex absolute top-4 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:top-auto sm:bottom-6 sm:left-auto sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
+        <div className="md:flex absolute top-4 left-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:top-auto sm:bottom-6 sm:left-auto sm:right-6 sm:gap-1 sm:p-2 md:bottom-6 md:right-6">
           <Button
             variant="ghost"
             size="icon"
