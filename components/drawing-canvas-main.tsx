@@ -39,7 +39,7 @@ function useTextEditor(params: {
 }) {
   const { screenPosition, fontSize, color, viewport, active } = params;
   const ref = useRef<HTMLTextAreaElement>(null);
-
+  
   const minWidth = 100;
   const minHeight = fontSize + 12;
   const padding = 8;
@@ -50,6 +50,7 @@ function useTextEditor(params: {
     padding,
     Math.min(screenPosition.x, viewport.width - 100)
   );
+
   const top = Math.max(
     padding,
     Math.min(screenPosition.y - fontSize - 4, viewport.height - 50)
@@ -59,6 +60,7 @@ function useTextEditor(params: {
 
   // Hide only if completely outside viewport with generous tolerance
   const tolerance = 150; // Allow 150px tolerance outside viewport
+
   // Use safe fallback values for SSR
   const getSafeViewportWidth = () => {
     if (typeof window !== "undefined") {
@@ -92,10 +94,10 @@ function useTextEditor(params: {
     color,
     minWidth: "20px",
     minHeight: `${fontSize}px`,
-    maxWidth: "500px",
+    maxWidth: "600px",
     maxHeight: `${Math.max(40, (viewport.height || 0) - 32)}px`,
     overflow: "auto",
-    lineHeight: 1.4,
+    lineHeight: 4,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
     padding: "0",
@@ -107,7 +109,7 @@ function useTextEditor(params: {
     resize: "none",
     fontFamily:
       "'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-    fontWeight: "400",
+    fontWeight: "600",
     display: hidden ? "none" : undefined,
     zIndex: 1000,
     textAlign: "left",
@@ -771,8 +773,24 @@ export default function DrawingCanvas() {
           const updatedShape = {
             ...shape,
             points: validPoints,
-            bounds: calculateBounds(shape) || undefined
           };
+
+          // Recalcular bounds con el shape actualizado (nuevos puntos)
+          const recalculatedBounds = calculateBounds(updatedShape);
+          if (recalculatedBounds) {
+            updatedShape.bounds = recalculatedBounds;
+
+            // Debug específico para texto
+            if (shape.type === "text") {
+              console.log("Debug - updateShape bounds recalculated:", {
+                text: shape.text?.substring(0, 20) + "...",
+                oldPosition: shape.points[0],
+                newPosition: validPoints[0],
+                oldBounds: shape.bounds,
+                newBounds: recalculatedBounds
+              });
+            }
+          }
 
           if (imageWidth !== undefined) updatedShape.imageWidth = imageWidth;
           if (imageHeight !== undefined) updatedShape.imageHeight = imageHeight;
@@ -789,9 +807,29 @@ export default function DrawingCanvas() {
 
   const updateShapeFully = (shapeId: string, newShape: Shape) => {
     setShapes((prev) =>
-      prev.map((shape) =>
-        shape.id === shapeId ? { ...newShape, id: shapeId } : shape
-      )
+      prev.map((shape) => {
+        if (shape.id === shapeId) {
+          // Forzar recálculo de bounds para texto y otros tipos que lo necesiten
+          const updatedShape = { ...newShape, id: shapeId };
+
+          // Recalcular bounds específicamente para texto
+          if (newShape.type === "text") {
+            const recalculatedBounds = calculateBounds(updatedShape);
+            if (recalculatedBounds) {
+              updatedShape.bounds = recalculatedBounds;
+              console.log("Debug - Bounds recalculated for text:", {
+                text: newShape.text?.substring(0, 20) + "...",
+                oldBounds: newShape.bounds,
+                newBounds: recalculatedBounds,
+                position: newShape.points[0]
+              });
+            }
+          }
+
+          return updatedShape;
+        }
+        return shape;
+      })
     );
   };
 
@@ -1078,12 +1116,37 @@ export default function DrawingCanvas() {
       shape.type === "image" ||
       shape.type === "pencil"
     ) {
-      return (
-        point.x >= bounds.minX - basePadding &&
-        point.x <= bounds.maxX + basePadding &&
-        point.y >= bounds.minY - basePadding &&
-        point.y <= bounds.maxY + basePadding
+      // Para texto, usar un padding mucho más grande para mejorar la detección
+      const textPadding = shape.type === "text" ? basePadding * 4 : basePadding; // 4x más grande para texto
+
+      // Debug para texto
+      if (shape.type === "text") {
+        console.log("Debug - Text selection:", {
+          text: shape.text?.substring(0, 20) + "...",
+          point,
+          bounds,
+          textPadding,
+          detectionArea: {
+            minX: bounds.minX - textPadding,
+            maxX: bounds.maxX + textPadding,
+            minY: bounds.minY - textPadding,
+            maxY: bounds.maxY + textPadding,
+          }
+        });
+      }
+
+      const isInside = (
+        point.x >= bounds.minX - textPadding &&
+        point.x <= bounds.maxX + textPadding &&
+        point.y >= bounds.minY - textPadding &&
+        point.y <= bounds.maxY + textPadding
       );
+
+      if (shape.type === "text") {
+        console.log("Debug - Text detection result:", isInside);
+      }
+
+      return isInside;
     }
 
     // Para líneas, verificar si el punto está cerca de la línea
@@ -1339,42 +1402,131 @@ export default function DrawingCanvas() {
       const bounds = shape.bounds;
 
       // Check each corner for rectangles and circles
-      if (
-        shape.type === "rectangle" ||
-        shape.type === "circle" ||
-        shape.type === "image"
-      ) {
-        // Usar las mismas coordenadas que se usan para dibujar los handles
-        // Los handles se dibujan en bounds.minX - handleSize/2, bounds.minY - handleSize/2, etc.
+      if (shape.type === "rectangle" && shape.points.length >= 2) {
+        // Para rectángulos, usar directamente los puntos del rectángulo
+        const start = shape.points[0];
+        const end = shape.points[1];
+
+        // Calcular las esquinas reales del rectángulo
+        const minX = Math.min(start.x, end.x);
+        const minY = Math.min(start.y, end.y);
+        const maxX = Math.max(start.x, end.x);
+        const maxY = Math.max(start.y, end.y);
+
+        // Las posiciones de los handles deben coincidir exactamente con cómo se dibujan
         const handlePositions = {
-          nw: { x: bounds.minX - handleSize / 2, y: bounds.minY - handleSize / 2 },
-          ne: { x: bounds.maxX - handleSize / 2, y: bounds.minY - handleSize / 2 },
-          sw: { x: bounds.minX - handleSize / 2, y: bounds.maxY - handleSize / 2 },
-          se: { x: bounds.maxX - handleSize / 2, y: bounds.maxY - handleSize / 2 },
+          nw: { x: minX, y: minY },
+          ne: { x: maxX, y: minY },
+          sw: { x: minX, y: maxY },
+          se: { x: maxX, y: maxY },
         };
+
+        // Aumentar el área de detección
+        const detectionRadius = handleSize * 2;
 
         // Check each corner handle position
         if (
-          Math.abs(point.x - handlePositions.nw.x) < handleSize &&
-          Math.abs(point.y - handlePositions.nw.y) < handleSize
+          Math.abs(point.x - handlePositions.nw.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.nw.y) < detectionRadius
         ) {
           return "nw";
         }
         if (
-          Math.abs(point.x - handlePositions.ne.x) < handleSize &&
-          Math.abs(point.y - handlePositions.ne.y) < handleSize
+          Math.abs(point.x - handlePositions.ne.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.ne.y) < detectionRadius
         ) {
           return "ne";
         }
         if (
-          Math.abs(point.x - handlePositions.sw.x) < handleSize &&
-          Math.abs(point.y - handlePositions.sw.y) < handleSize
+          Math.abs(point.x - handlePositions.sw.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.sw.y) < detectionRadius
         ) {
           return "sw";
         }
         if (
-          Math.abs(point.x - handlePositions.se.x) < handleSize &&
-          Math.abs(point.y - handlePositions.se.y) < handleSize
+          Math.abs(point.x - handlePositions.se.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.se.y) < detectionRadius
+        ) {
+          return "se";
+        }
+      } else if (shape.type === "circle" && shape.points.length >= 2) {
+        // Para círculos, usar puntos en el perímetro en las direcciones cardinales
+        const center = shape.points[0];
+        const edge = shape.points[1];
+        const radius = Math.sqrt(
+          Math.pow(edge.x - center.x, 2) + Math.pow(edge.y - center.y, 2)
+        );
+
+        // Posiciones de handles en las direcciones cardinales
+        const handlePositions = {
+          nw: { x: center.x - radius, y: center.y - radius }, // Esquina superior izquierda
+          ne: { x: center.x + radius, y: center.y - radius }, // Esquina superior derecha
+          sw: { x: center.x - radius, y: center.y + radius }, // Esquina inferior izquierda
+          se: { x: center.x + radius, y: center.y + radius }, // Esquina inferior derecha
+        };
+
+        // Aumentar el área de detección para círculos
+        const detectionRadius = handleSize * 2.5;
+
+        // Check each corner handle position
+        if (
+          Math.abs(point.x - handlePositions.nw.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.nw.y) < detectionRadius
+        ) {
+          return "nw";
+        }
+        if (
+          Math.abs(point.x - handlePositions.ne.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.ne.y) < detectionRadius
+        ) {
+          return "ne";
+        }
+        if (
+          Math.abs(point.x - handlePositions.sw.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.sw.y) < detectionRadius
+        ) {
+          return "sw";
+        }
+        if (
+          Math.abs(point.x - handlePositions.se.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.se.y) < detectionRadius
+        ) {
+          return "se";
+        }
+      } else if (shape.type === "image") {
+        // Para imágenes, usar los bounds
+        const handlePositions = {
+          nw: { x: bounds.minX, y: bounds.minY },
+          ne: { x: bounds.maxX, y: bounds.minY },
+          sw: { x: bounds.minX, y: bounds.maxY },
+          se: { x: bounds.maxX, y: bounds.maxY },
+        };
+
+        // Aumentar el área de detección
+        const detectionRadius = handleSize * 2;
+
+        // Check each corner handle position
+        if (
+          Math.abs(point.x - handlePositions.nw.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.nw.y) < detectionRadius
+        ) {
+          return "nw";
+        }
+        if (
+          Math.abs(point.x - handlePositions.ne.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.ne.y) < detectionRadius
+        ) {
+          return "ne";
+        }
+        if (
+          Math.abs(point.x - handlePositions.sw.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.sw.y) < detectionRadius
+        ) {
+          return "sw";
+        }
+        if (
+          Math.abs(point.x - handlePositions.se.x) < detectionRadius &&
+          Math.abs(point.y - handlePositions.se.y) < detectionRadius
         ) {
           return "se";
         }
@@ -1977,59 +2129,103 @@ export default function DrawingCanvas() {
           const handleSize = 12;
           ctx.fillStyle = "#3b82f6";
 
-          // Draw corner handles with more visibility
-          ctx.fillRect(
-            boundsToUse.minX - handleSize / 2,
-            boundsToUse.minY - handleSize / 2,
-            handleSize,
-            handleSize
-          );
-          ctx.fillRect(
-            boundsToUse.maxX - handleSize / 2,
-            boundsToUse.minY - handleSize / 2,
-            handleSize,
-            handleSize
-          );
-          ctx.fillRect(
-            boundsToUse.minX - handleSize / 2,
-            boundsToUse.maxY - handleSize / 2,
-            handleSize,
-            handleSize
-          );
-          ctx.fillRect(
-            boundsToUse.maxX - handleSize / 2,
-            boundsToUse.maxY - handleSize / 2,
-            handleSize,
-            handleSize
-          );
+          // Para rectángulos, dibujar handles en las esquinas exactas del rectángulo
+          if (shape.type === "rectangle" && shape.points.length >= 2) {
+            const start = shape.points[0];
+            const end = shape.points[1];
+            const minX = Math.min(start.x, end.x);
+            const minY = Math.min(start.y, end.y);
+            const maxX = Math.max(start.x, end.x);
+            const maxY = Math.max(start.y, end.y);
+
+            // Draw corner handles en las esquinas exactas del rectángulo
+            ctx.fillRect(minX - handleSize / 2, minY - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(maxX - handleSize / 2, minY - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(minX - handleSize / 2, maxY - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(maxX - handleSize / 2, maxY - handleSize / 2, handleSize, handleSize);
+          } else if (shape.type === "circle" && shape.points.length >= 2) {
+            // Para círculos, dibujar handles en las direcciones cardinales
+            const center = shape.points[0];
+            const edge = shape.points[1];
+            const radius = Math.sqrt(
+              Math.pow(edge.x - center.x, 2) + Math.pow(edge.y - center.y, 2)
+            );
+
+            // Draw handles en las esquinas del cuadro delimitador del círculo
+            ctx.fillRect(center.x - radius - handleSize / 2, center.y - radius - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(center.x + radius - handleSize / 2, center.y - radius - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(center.x - radius - handleSize / 2, center.y + radius - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(center.x + radius - handleSize / 2, center.y + radius - handleSize / 2, handleSize, handleSize);
+          } else {
+            // Para imágenes, usar los bounds
+            ctx.fillRect(
+              boundsToUse.minX - handleSize / 2,
+              boundsToUse.minY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              boundsToUse.maxX - handleSize / 2,
+              boundsToUse.minY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              boundsToUse.minX - handleSize / 2,
+              boundsToUse.maxY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              boundsToUse.maxX - handleSize / 2,
+              boundsToUse.maxY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+          }
 
           // Add white centers to corner handles for better visibility
           ctx.fillStyle = "#ffffff";
           const centerHandleSize = 6;
-          ctx.fillRect(
-            boundsToUse.minX - centerHandleSize / 2,
-            boundsToUse.minY - centerHandleSize / 2,
-            centerHandleSize,
-            centerHandleSize
-          );
-          ctx.fillRect(
-            boundsToUse.maxX - centerHandleSize / 2,
-            boundsToUse.minY - centerHandleSize / 2,
-            centerHandleSize,
-            centerHandleSize
-          );
-          ctx.fillRect(
-            boundsToUse.minX - centerHandleSize / 2,
-            boundsToUse.maxY - centerHandleSize / 2,
-            centerHandleSize,
-            centerHandleSize
-          );
-          ctx.fillRect(
-            boundsToUse.maxX - centerHandleSize / 2,
-            boundsToUse.maxY - centerHandleSize / 2,
-            centerHandleSize,
-            centerHandleSize
-          );
+
+          if (shape.type === "rectangle" && shape.points.length >= 2) {
+            const start = shape.points[0];
+            const end = shape.points[1];
+            const minX = Math.min(start.x, end.x);
+            const minY = Math.min(start.y, end.y);
+            const maxX = Math.max(start.x, end.x);
+            const maxY = Math.max(start.y, end.y);
+
+            ctx.fillRect(minX - centerHandleSize / 2, minY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
+            ctx.fillRect(maxX - centerHandleSize / 2, minY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
+            ctx.fillRect(minX - centerHandleSize / 2, maxY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
+            ctx.fillRect(maxX - centerHandleSize / 2, maxY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
+          } else {
+            ctx.fillRect(
+              boundsToUse.minX - centerHandleSize / 2,
+              boundsToUse.minY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+            ctx.fillRect(
+              boundsToUse.maxX - centerHandleSize / 2,
+              boundsToUse.minY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+            ctx.fillRect(
+              boundsToUse.minX - centerHandleSize / 2,
+              boundsToUse.maxY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+            ctx.fillRect(
+              boundsToUse.maxX - centerHandleSize / 2,
+              boundsToUse.maxY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+          }
         } else if (shape.type === "line" && shape.points.length >= 2) {
           const handleSize = 8;
           const start = shape.points[0];
@@ -2286,12 +2482,15 @@ export default function DrawingCanvas() {
       }
 
       // Check if clicking on existing text to edit it
+      console.log("Debug - Text tool clicked at point:", point);
       const clickedShape = [...shapes]
         .reverse()
         .find(
           (shape) =>
             shape.type === "text" && isPointInShape(point, shape, isTouchEvent)
         );
+
+      console.log("Debug - Text tool found shape:", clickedShape ? clickedShape.text?.substring(0, 20) + "..." : "none");
 
       if (clickedShape && clickedShape.text) {
         // Edit existing text
