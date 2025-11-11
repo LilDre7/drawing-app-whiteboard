@@ -39,7 +39,7 @@ function useTextEditor(params: {
 }) {
   const { screenPosition, fontSize, color, viewport, active } = params;
   const ref = useRef<HTMLTextAreaElement>(null);
-  
+
   const minWidth = 100;
   const minHeight = fontSize + 12;
   const padding = 8;
@@ -55,8 +55,6 @@ function useTextEditor(params: {
     padding,
     Math.min(screenPosition.y - fontSize - 4, viewport.height - 50)
   );
-
-
 
   // Hide only if completely outside viewport with generous tolerance
   const tolerance = 150; // Allow 150px tolerance outside viewport
@@ -108,7 +106,7 @@ function useTextEditor(params: {
     outline: "none",
     resize: "none",
     fontFamily:
-      "'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+      "'Fredoka', 'Comic Neue', 'Patrick Hand', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
     fontWeight: "600",
     display: hidden ? "none" : undefined,
     zIndex: 1000,
@@ -338,8 +336,8 @@ export default function DrawingCanvas() {
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
   const [showWelcome, setShowWelcome] = useState(true);
   const [color, setColor] = useState("#1e293b");
-  const [strokeWidth, setStrokeWidth] = useState(2);
-  const [textSize, setTextSize] = useState(20); // Tamaño de fuente específico para texto
+  const [strokeWidth, setStrokeWidth] = useState(3); // Trazo más grueso
+  const [textSize, setTextSize] = useState(24); // Texto más grande
   const [zoom, setZoom] = useState(100);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
 
@@ -356,7 +354,7 @@ export default function DrawingCanvas() {
   const titleInputRef = useRef<HTMLInputElement>(null);
 
   const [panOffset, setPanOffset] = useState<Point>({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false)
+  const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState<Point>({ x: 0, y: 0 });
 
   // Calculate screen position from canvas coordinates (relative to canvas container)
@@ -427,7 +425,7 @@ export default function DrawingCanvas() {
     "Time to make art! Or beautiful mistakes. Those count too, right? 🎭",
     "Welcome! Let's create something that makes your friends say 'Wow!' or 'Huh?' 🤔",
     "Your digital canvas is ready! Go wild or draw tiny circles. Whatever works. 🌀",
-    "Ready to unleash your inner artist? Or your inner procrastinator? Both are valid. 🎪"
+    "Ready to unleash your inner artist? Or your inner procrastinator? Both are valid. 🎪",
   ];
 
   const getRandomWelcomeMessage = () => {
@@ -439,7 +437,10 @@ export default function DrawingCanvas() {
   // Helper functions for shape manipulation
 
   // Function to add roughness/hand-drawn effect to points
-  const addRoughnessToPoints = (points: Point[], roughnessAmount: number = 1.5): Point[] => {
+  const addRoughnessToPoints = (
+    points: Point[],
+    roughnessAmount: number = 1.5
+  ): Point[] => {
     if (points.length < 2) return points;
 
     const roughPoints: Point[] = [];
@@ -474,7 +475,7 @@ export default function DrawingCanvas() {
       // Apply both perpendicular offset and jitter
       const roughPoint = {
         x: currentPoint.x + perpDirX * perpendicularOffset + jitterX,
-        y: currentPoint.y + perpDirY * perpendicularOffset + jitterY
+        y: currentPoint.y + perpDirY * perpendicularOffset + jitterY,
       };
 
       roughPoints.push(roughPoint);
@@ -488,7 +489,7 @@ export default function DrawingCanvas() {
 
       roughPoints.push({
         x: lastPoint.x + finalJitterX,
-        y: lastPoint.y + finalJitterY
+        y: lastPoint.y + finalJitterY,
       });
     }
 
@@ -496,14 +497,18 @@ export default function DrawingCanvas() {
   };
 
   // Function to create wavy line effect
-  const createWavyLine = (start: Point, end: Point, segments: number = 3): Point[] => {
+  const createWavyLine = (
+    start: Point,
+    end: Point,
+    segments: number = 3
+  ): Point[] => {
     const points: Point[] = [];
     const dx = (end.x - start.x) / segments;
     const dy = (end.y - start.y) / segments;
 
     for (let i = 0; i <= segments; i++) {
-      const baseX = start.x + (dx * i);
-      const baseY = start.y + (dy * i);
+      const baseX = start.x + dx * i;
+      const baseY = start.y + dy * i;
 
       // Add perpendicular wave effect - much more exaggerated
       const perpX = -dy;
@@ -517,7 +522,7 @@ export default function DrawingCanvas() {
 
       points.push({
         x: baseX + perpNormX * waveOffset,
-        y: baseY + perpNormY * waveOffset
+        y: baseY + perpNormY * waveOffset,
       });
     }
 
@@ -526,33 +531,38 @@ export default function DrawingCanvas() {
 
   // Enhanced validation and clean shapes array
   const validateShapes = useCallback((shapesArray: Shape[]) => {
-    return shapesArray.filter(shape => {
+    return shapesArray.filter((shape) => {
       // Basic shape validation
-      if (!shape || !shape.id || typeof shape.id !== 'string') {
+      if (!shape || !shape.id || typeof shape.id !== "string") {
         console.warn("Invalid shape: missing or invalid id", shape);
         return false;
       }
 
-      if (!shape.type || typeof shape.type !== 'string') {
+      if (!shape.type || typeof shape.type !== "string") {
         console.warn("Invalid shape: missing or invalid type", shape);
         return false;
       }
 
-      if (!shape.points || !Array.isArray(shape.points) || shape.points.length === 0) {
+      if (
+        !shape.points ||
+        !Array.isArray(shape.points) ||
+        shape.points.length === 0
+      ) {
         console.warn("Invalid shape: missing or empty points array", shape);
         return false;
       }
 
       // Validate all points are properly formed
-      const validPoints = shape.points.filter(p =>
-        p &&
-        typeof p === 'object' &&
-        typeof p.x === 'number' &&
-        typeof p.y === 'number' &&
-        !isNaN(p.x) &&
-        !isNaN(p.y) &&
-        isFinite(p.x) &&
-        isFinite(p.y)
+      const validPoints = shape.points.filter(
+        (p) =>
+          p &&
+          typeof p === "object" &&
+          typeof p.x === "number" &&
+          typeof p.y === "number" &&
+          !isNaN(p.x) &&
+          !isNaN(p.y) &&
+          isFinite(p.x) &&
+          isFinite(p.y)
       );
 
       if (validPoints.length === 0) {
@@ -562,17 +572,25 @@ export default function DrawingCanvas() {
 
       // If some points were invalid, log warning but keep shape if it has valid points
       if (validPoints.length !== shape.points.length) {
-        console.warn(`Shape ${shape.id} had ${shape.points.length - validPoints.length} invalid points, cleaning up`);
+        console.warn(
+          `Shape ${shape.id} had ${
+            shape.points.length - validPoints.length
+          } invalid points, cleaning up`
+        );
         shape.points = validPoints; // Clean up the points in place
       }
 
       // Validate other essential properties
-      if (!shape.color || typeof shape.color !== 'string') {
+      if (!shape.color || typeof shape.color !== "string") {
         console.warn("Invalid shape: missing or invalid color", shape);
         return false;
       }
 
-      if (!shape.strokeWidth || typeof shape.strokeWidth !== 'number' || shape.strokeWidth <= 0) {
+      if (
+        !shape.strokeWidth ||
+        typeof shape.strokeWidth !== "number" ||
+        shape.strokeWidth <= 0
+      ) {
         console.warn("Invalid shape: invalid strokeWidth", shape);
         return false;
       }
@@ -584,10 +602,10 @@ export default function DrawingCanvas() {
   // Enhanced periodic validation of shapes to prevent corruption (client-side only)
   useEffect(() => {
     // Only run on client side
-    if (typeof window === 'undefined') return;
+    if (typeof window === "undefined") return;
 
     const interval = setInterval(() => {
-      setShapes(prevShapes => {
+      setShapes((prevShapes) => {
         if (!Array.isArray(prevShapes)) {
           console.warn("Shapes array is not valid, resetting to empty array");
           return [];
@@ -597,8 +615,12 @@ export default function DrawingCanvas() {
         const removedCount = prevShapes.length - validatedShapes.length;
 
         if (removedCount > 0) {
-          console.warn(`Cleaned up ${removedCount} invalid shapes during periodic validation`);
-          console.log(`Previous shapes count: ${prevShapes.length}, Valid shapes count: ${validatedShapes.length}`);
+          console.warn(
+            `Cleaned up ${removedCount} invalid shapes during periodic validation`
+          );
+          console.log(
+            `Previous shapes count: ${prevShapes.length}, Valid shapes count: ${validatedShapes.length}`
+          );
         }
 
         return validatedShapes;
@@ -611,10 +633,12 @@ export default function DrawingCanvas() {
   // Additional validation on window focus/visibility change to catch potential corruption
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        setShapes(prevShapes => {
+      if (document.visibilityState === "visible") {
+        setShapes((prevShapes) => {
           if (!Array.isArray(prevShapes)) {
-            console.warn("Shapes array corrupted on visibility change, resetting");
+            console.warn(
+              "Shapes array corrupted on visibility change, resetting"
+            );
             return [];
           }
           return validateShapes(prevShapes);
@@ -623,7 +647,7 @@ export default function DrawingCanvas() {
     };
 
     const handleFocus = () => {
-      setShapes(prevShapes => {
+      setShapes((prevShapes) => {
         if (!Array.isArray(prevShapes)) {
           console.warn("Shapes array corrupted on window focus, resetting");
           return [];
@@ -632,12 +656,12 @@ export default function DrawingCanvas() {
       });
     };
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    window.addEventListener("focus", handleFocus);
 
     return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener("focus", handleFocus);
     };
   }, [validateShapes]);
 
@@ -648,12 +672,12 @@ export default function DrawingCanvas() {
       return;
     }
 
-    if (!shape.id || typeof shape.id !== 'string') {
+    if (!shape.id || typeof shape.id !== "string") {
       console.warn("Shape missing valid id:", shape);
       return;
     }
 
-    if (!shape.type || typeof shape.type !== 'string') {
+    if (!shape.type || typeof shape.type !== "string") {
       console.warn("Shape missing valid type:", shape);
       return;
     }
@@ -664,15 +688,16 @@ export default function DrawingCanvas() {
     }
 
     // Validate and clean points
-    const validPoints = shape.points.filter(p =>
-      p &&
-      typeof p === 'object' &&
-      typeof p.x === 'number' &&
-      typeof p.y === 'number' &&
-      !isNaN(p.x) &&
-      !isNaN(p.y) &&
-      isFinite(p.x) &&
-      isFinite(p.y)
+    const validPoints = shape.points.filter(
+      (p) =>
+        p &&
+        typeof p === "object" &&
+        typeof p.x === "number" &&
+        typeof p.y === "number" &&
+        !isNaN(p.x) &&
+        !isNaN(p.y) &&
+        isFinite(p.x) &&
+        isFinite(p.y)
     );
 
     if (validPoints.length === 0) {
@@ -681,12 +706,16 @@ export default function DrawingCanvas() {
     }
 
     // Validate other essential properties
-    if (!shape.color || typeof shape.color !== 'string') {
+    if (!shape.color || typeof shape.color !== "string") {
       console.warn("Shape missing valid color:", shape);
       return;
     }
 
-    if (!shape.strokeWidth || typeof shape.strokeWidth !== 'number' || shape.strokeWidth <= 0) {
+    if (
+      !shape.strokeWidth ||
+      typeof shape.strokeWidth !== "number" ||
+      shape.strokeWidth <= 0
+    ) {
       console.warn("Shape missing valid strokeWidth:", shape);
       return;
     }
@@ -695,7 +724,7 @@ export default function DrawingCanvas() {
     const validShape: Shape = {
       ...shape,
       points: validPoints,
-      bounds: calculateBounds(shape) || undefined
+      bounds: calculateBounds(shape) || undefined,
     };
 
     setShapes((prev) => {
@@ -703,7 +732,7 @@ export default function DrawingCanvas() {
       const prevShapes = Array.isArray(prev) ? prev : [];
 
       // Check for duplicate IDs and replace if found
-      const existingIndex = prevShapes.findIndex(s => s && s.id === shape.id);
+      const existingIndex = prevShapes.findIndex((s) => s && s.id === shape.id);
       let newShapes: Shape[];
 
       if (existingIndex !== -1) {
@@ -730,8 +759,8 @@ export default function DrawingCanvas() {
       const prevShapes = Array.isArray(prev) ? prev : [];
 
       // Filter out the shape with matching ID
-      const filteredShapes = prevShapes.filter((shape) =>
-        shape && shape.id && shape.id !== shapeId
+      const filteredShapes = prevShapes.filter(
+        (shape) => shape && shape.id && shape.id !== shapeId
       );
 
       // Validate the resulting array
@@ -754,19 +783,22 @@ export default function DrawingCanvas() {
 
         if (shape.id === shapeId) {
           // Validate the new points
-          const validPoints = points.filter(p =>
-            p &&
-            typeof p === 'object' &&
-            typeof p.x === 'number' &&
-            typeof p.y === 'number' &&
-            !isNaN(p.x) &&
-            !isNaN(p.y) &&
-            isFinite(p.x) &&
-            isFinite(p.y)
+          const validPoints = points.filter(
+            (p) =>
+              p &&
+              typeof p === "object" &&
+              typeof p.x === "number" &&
+              typeof p.y === "number" &&
+              !isNaN(p.x) &&
+              !isNaN(p.y) &&
+              isFinite(p.x) &&
+              isFinite(p.y)
           );
 
           if (validPoints.length === 0) {
-            console.warn(`Cannot update shape ${shapeId}: no valid points provided`);
+            console.warn(
+              `Cannot update shape ${shapeId}: no valid points provided`
+            );
             return shape; // Return original shape if points are invalid
           }
 
@@ -779,17 +811,6 @@ export default function DrawingCanvas() {
           const recalculatedBounds = calculateBounds(updatedShape);
           if (recalculatedBounds) {
             updatedShape.bounds = recalculatedBounds;
-
-            // Debug específico para texto
-            if (shape.type === "text") {
-              console.log("Debug - updateShape bounds recalculated:", {
-                text: shape.text?.substring(0, 20) + "...",
-                oldPosition: shape.points[0],
-                newPosition: validPoints[0],
-                oldBounds: shape.bounds,
-                newBounds: recalculatedBounds
-              });
-            }
           }
 
           if (imageWidth !== undefined) updatedShape.imageWidth = imageWidth;
@@ -817,12 +838,6 @@ export default function DrawingCanvas() {
             const recalculatedBounds = calculateBounds(updatedShape);
             if (recalculatedBounds) {
               updatedShape.bounds = recalculatedBounds;
-              console.log("Debug - Bounds recalculated for text:", {
-                text: newShape.text?.substring(0, 20) + "...",
-                oldBounds: newShape.bounds,
-                newBounds: recalculatedBounds,
-                position: newShape.points[0]
-              });
             }
           }
 
@@ -1017,7 +1032,7 @@ export default function DrawingCanvas() {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           const fontSize = Math.max(12, getFontSize(shape.strokeWidth * 8));
-          ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+          ctx.font = `${fontSize}px 'Fredoka', 'Comic Neue', 'Patrick Hand', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
           const metrics = ctx.measureText(shape.text);
           const textHeight = fontSize;
           const padding = Math.max(10, fontSize / 2); // Increased padding for better selection area
@@ -1119,32 +1134,11 @@ export default function DrawingCanvas() {
       // Para texto, usar un padding mucho más grande para mejorar la detección
       const textPadding = shape.type === "text" ? basePadding * 4 : basePadding; // 4x más grande para texto
 
-      // Debug para texto
-      if (shape.type === "text") {
-        console.log("Debug - Text selection:", {
-          text: shape.text?.substring(0, 20) + "...",
-          point,
-          bounds,
-          textPadding,
-          detectionArea: {
-            minX: bounds.minX - textPadding,
-            maxX: bounds.maxX + textPadding,
-            minY: bounds.minY - textPadding,
-            maxY: bounds.maxY + textPadding,
-          }
-        });
-      }
-
-      const isInside = (
+      const isInside =
         point.x >= bounds.minX - textPadding &&
         point.x <= bounds.maxX + textPadding &&
         point.y >= bounds.minY - textPadding &&
-        point.y <= bounds.maxY + textPadding
-      );
-
-      if (shape.type === "text") {
-        console.log("Debug - Text detection result:", isInside);
-      }
+        point.y <= bounds.maxY + textPadding;
 
       return isInside;
     }
@@ -1872,14 +1866,15 @@ export default function DrawingCanvas() {
     }
 
     // Validate all points have valid coordinates
-    const validPoints = shape.points.filter(p =>
-      p &&
-      typeof p.x === 'number' &&
-      typeof p.y === 'number' &&
-      !isNaN(p.x) &&
-      !isNaN(p.y) &&
-      isFinite(p.x) &&
-      isFinite(p.y)
+    const validPoints = shape.points.filter(
+      (p) =>
+        p &&
+        typeof p.x === "number" &&
+        typeof p.y === "number" &&
+        !isNaN(p.x) &&
+        !isNaN(p.y) &&
+        isFinite(p.x) &&
+        isFinite(p.y)
     );
 
     if (validPoints.length === 0) {
@@ -1887,7 +1882,7 @@ export default function DrawingCanvas() {
     }
 
     // Set drawing properties with validation - moderately thicker lines
-    ctx.strokeStyle = shape.color || '#000000';
+    ctx.strokeStyle = shape.color || "#000000";
     ctx.lineWidth = Math.max(2, Math.min(40, (shape.strokeWidth || 2) * 1.8)); // Moderately thicker lines
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -1925,7 +1920,10 @@ export default function DrawingCanvas() {
 
       // Last segment
       if (wavyPoints.length > 1) {
-        ctx.lineTo(wavyPoints[wavyPoints.length - 1].x, wavyPoints[wavyPoints.length - 1].y);
+        ctx.lineTo(
+          wavyPoints[wavyPoints.length - 1].x,
+          wavyPoints[wavyPoints.length - 1].y
+        );
       }
 
       ctx.stroke();
@@ -1940,7 +1938,7 @@ export default function DrawingCanvas() {
         { x: end.x, y: start.y },
         end,
         { x: start.x, y: end.y },
-        start
+        start,
       ];
 
       // Add roughness to each side
@@ -1970,38 +1968,25 @@ export default function DrawingCanvas() {
         Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2)
       );
 
-      // Create rough circle with multiple small segments
-      const segments = 20;
-      const circlePoints: Point[] = [];
-
-      for (let i = 0; i <= segments; i++) {
-        const angle = (i / segments) * 2 * Math.PI;
-        const x = start.x + Math.cos(angle) * radius;
-        const y = start.y + Math.sin(angle) * radius;
-        circlePoints.push({ x, y });
-      }
-
-      // Add roughness to circle
-      const roughCirclePoints = addRoughnessToPoints(circlePoints, 1.5);
-
+      // Draw smooth circle using arc() method
       ctx.beginPath();
-      ctx.moveTo(roughCirclePoints[0].x, roughCirclePoints[0].y);
-      for (let i = 1; i < roughCirclePoints.length; i++) {
-        ctx.lineTo(roughCirclePoints[i].x, roughCirclePoints[i].y);
-      }
-      ctx.closePath();
+      ctx.arc(start.x, start.y, radius, 0, 2 * Math.PI);
       ctx.stroke();
     } else if (shape.type === "text" && shape.text) {
       const fontSize = Math.max(12, getFontSize(shape.strokeWidth * 8)); // Ensure minimum readable font size
-      ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+      ctx.font = `${fontSize}px 'Fredoka', 'Comic Neue', 'Patrick Hand', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
       ctx.fillStyle = shape.color;
       ctx.textBaseline = "alphabetic";
       ctx.textAlign = "left";
       // Ensure text is always rendered if it exists
       if (shape.text && shape.text.trim().length > 0) {
         // Double-check font is set properly
-        if (!ctx.font.includes("Comic Neue")) {
-          ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+        if (
+          !ctx.font.includes("Fredoka") &&
+          !ctx.font.includes("Patrick Hand") &&
+          !ctx.font.includes("Nunito")
+        ) {
+          ctx.font = `${fontSize}px 'Fredoka', 'Comic Neue', 'Patrick Hand', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
         }
         ctx.fillText(shape.text, shape.points[0].x, shape.points[0].y);
       }
@@ -2139,10 +2124,30 @@ export default function DrawingCanvas() {
             const maxY = Math.max(start.y, end.y);
 
             // Draw corner handles en las esquinas exactas del rectángulo
-            ctx.fillRect(minX - handleSize / 2, minY - handleSize / 2, handleSize, handleSize);
-            ctx.fillRect(maxX - handleSize / 2, minY - handleSize / 2, handleSize, handleSize);
-            ctx.fillRect(minX - handleSize / 2, maxY - handleSize / 2, handleSize, handleSize);
-            ctx.fillRect(maxX - handleSize / 2, maxY - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(
+              minX - handleSize / 2,
+              minY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              maxX - handleSize / 2,
+              minY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              minX - handleSize / 2,
+              maxY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              maxX - handleSize / 2,
+              maxY - handleSize / 2,
+              handleSize,
+              handleSize
+            );
           } else if (shape.type === "circle" && shape.points.length >= 2) {
             // Para círculos, dibujar handles en las direcciones cardinales
             const center = shape.points[0];
@@ -2152,10 +2157,30 @@ export default function DrawingCanvas() {
             );
 
             // Draw handles en las esquinas del cuadro delimitador del círculo
-            ctx.fillRect(center.x - radius - handleSize / 2, center.y - radius - handleSize / 2, handleSize, handleSize);
-            ctx.fillRect(center.x + radius - handleSize / 2, center.y - radius - handleSize / 2, handleSize, handleSize);
-            ctx.fillRect(center.x - radius - handleSize / 2, center.y + radius - handleSize / 2, handleSize, handleSize);
-            ctx.fillRect(center.x + radius - handleSize / 2, center.y + radius - handleSize / 2, handleSize, handleSize);
+            ctx.fillRect(
+              center.x - radius - handleSize / 2,
+              center.y - radius - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              center.x + radius - handleSize / 2,
+              center.y - radius - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              center.x - radius - handleSize / 2,
+              center.y + radius - handleSize / 2,
+              handleSize,
+              handleSize
+            );
+            ctx.fillRect(
+              center.x + radius - handleSize / 2,
+              center.y + radius - handleSize / 2,
+              handleSize,
+              handleSize
+            );
           } else {
             // Para imágenes, usar los bounds
             ctx.fillRect(
@@ -2196,10 +2221,30 @@ export default function DrawingCanvas() {
             const maxX = Math.max(start.x, end.x);
             const maxY = Math.max(start.y, end.y);
 
-            ctx.fillRect(minX - centerHandleSize / 2, minY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
-            ctx.fillRect(maxX - centerHandleSize / 2, minY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
-            ctx.fillRect(minX - centerHandleSize / 2, maxY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
-            ctx.fillRect(maxX - centerHandleSize / 2, maxY - centerHandleSize / 2, centerHandleSize, centerHandleSize);
+            ctx.fillRect(
+              minX - centerHandleSize / 2,
+              minY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+            ctx.fillRect(
+              maxX - centerHandleSize / 2,
+              minY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+            ctx.fillRect(
+              minX - centerHandleSize / 2,
+              maxY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
+            ctx.fillRect(
+              maxX - centerHandleSize / 2,
+              maxY - centerHandleSize / 2,
+              centerHandleSize,
+              centerHandleSize
+            );
           } else {
             ctx.fillRect(
               boundsToUse.minX - centerHandleSize / 2,
@@ -2482,15 +2527,12 @@ export default function DrawingCanvas() {
       }
 
       // Check if clicking on existing text to edit it
-      console.log("Debug - Text tool clicked at point:", point);
       const clickedShape = [...shapes]
         .reverse()
         .find(
           (shape) =>
             shape.type === "text" && isPointInShape(point, shape, isTouchEvent)
         );
-
-      console.log("Debug - Text tool found shape:", clickedShape ? clickedShape.text?.substring(0, 20) + "..." : "none");
 
       if (clickedShape && clickedShape.text) {
         // Edit existing text
@@ -3110,8 +3152,13 @@ export default function DrawingCanvas() {
     if (currentShape && isDrawing) {
       // Additional validation before committing the shape
       if (currentShape.points && currentShape.points.length > 0) {
-        const validPoints = currentShape.points.filter(p =>
-          p && typeof p.x === 'number' && typeof p.y === 'number' && !isNaN(p.x) && !isNaN(p.y)
+        const validPoints = currentShape.points.filter(
+          (p) =>
+            p &&
+            typeof p.x === "number" &&
+            typeof p.y === "number" &&
+            !isNaN(p.x) &&
+            !isNaN(p.y)
         );
 
         if (validPoints.length > 0) {
@@ -3167,7 +3214,7 @@ export default function DrawingCanvas() {
         const ctx = canvas.getContext("2d");
         if (ctx) {
           const fontSize = getFontSize(textSize);
-          ctx.font = `${fontSize}px 'Comic Neue', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+          ctx.font = `${fontSize}px 'Fredoka', 'Comic Neue', 'Patrick Hand', 'Nunito', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
           const metrics = ctx.measureText(textValue);
           const textHeight = fontSize;
           const padding = 10; // Consistent padding with other text calculations
@@ -3255,162 +3302,175 @@ export default function DrawingCanvas() {
   };
 
   /**
- * Calcula la distancia euclidiana entre dos puntos táctiles
- * @param touch1 Primer toque
- * @param touch2 Segundo toque
- * @returns Distancia en píxeles
- */
-const getTouchDistance = (touch1: React.Touch, touch2: React.Touch): number => {
-  const dx = touch1.clientX - touch2.clientX;
-  const dy = touch1.clientY - touch2.clientY;
-  return Math.sqrt(dx * dx + dy * dy);
-};
-
-/**
- * Calcula el punto medio entre dos toques
- * @param touch1 Primer toque
- * @param touch2 Segundo toque
- * @returns Coordenadas del punto medio
- */
-const getTouchCenter = (touch1: React.Touch, touch2: React.Touch): { x: number; y: number } => {
-  return {
-    x: (touch1.clientX + touch2.clientX) / 2,
-    y: (touch1.clientY + touch2.clientY) / 2,
+   * Calcula la distancia euclidiana entre dos puntos táctiles
+   * @param touch1 Primer toque
+   * @param touch2 Segundo toque
+   * @returns Distancia en píxeles
+   */
+  const getTouchDistance = (
+    touch1: React.Touch,
+    touch2: React.Touch
+  ): number => {
+    const dx = touch1.clientX - touch2.clientX;
+    const dy = touch1.clientY - touch2.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
   };
-};
 
-/**
- * Restringe un valor entre un mínimo y un máximo (clamp function)
- * @param value Valor a restringir
- * @param min Valor mínimo
- * @param max Valor máximo
- * @returns Valor restringido
- */
-const clamp = (value: number, min: number, max: number): number => {
-  return Math.min(Math.max(value, min), max);
-};
+  /**
+   * Calcula el punto medio entre dos toques
+   * @param touch1 Primer toque
+   * @param touch2 Segundo toque
+   * @returns Coordenadas del punto medio
+   */
+  const getTouchCenter = (
+    touch1: React.Touch,
+    touch2: React.Touch
+  ): { x: number; y: number } => {
+    return {
+      x: (touch1.clientX + touch2.clientX) / 2,
+      y: (touch1.clientY + touch2.clientY) / 2,
+    };
+  };
 
-/**
- * Inicia el gesto de pinch-to-zoom
- * @param touch1 Primer dedo
- * @param touch2 Segundo dedo
- */
-const startPinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
-  const distance = getTouchDistance(touch1, touch2);
-  const center = getTouchCenter(touch1, touch2);
+  /**
+   * Restringe un valor entre un mínimo y un máximo (clamp function)
+   * @param value Valor a restringir
+   * @param min Valor mínimo
+   * @param max Valor máximo
+   * @returns Valor restringido
+   */
+  const clamp = (value: number, min: number, max: number): number => {
+    return Math.min(Math.max(value, min), max);
+  };
 
-  // Guardar estado inicial del gesto
-  setInitialTouchDistance(distance);
-  setLastTouchDistance(distance);
-  setPinchCenter(center);
-  setInitialScale(zoom / 100); // Convertir zoom de porcentaje a escala decimal
-  setIsPinching(true);
-};
+  /**
+   * Inicia el gesto de pinch-to-zoom
+   * @param touch1 Primer dedo
+   * @param touch2 Segundo dedo
+   */
+  const startPinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+    const distance = getTouchDistance(touch1, touch2);
+    const center = getTouchCenter(touch1, touch2);
 
-/**
- * Aplica el zoom de forma suave usando requestAnimationFrame
- * @param touch1 Primer dedo
- * @param touch2 Segundo dedo
- */
-const applySmoothPinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
-  // Cancelar animación anterior si existe
-  if (pinchAnimationRef.current) {
-    cancelAnimationFrame(pinchAnimationRef.current);
-  }
+    // Guardar estado inicial del gesto
+    setInitialTouchDistance(distance);
+    setLastTouchDistance(distance);
+    setPinchCenter(center);
+    setInitialScale(zoom / 100); // Convertir zoom de porcentaje a escala decimal
+    setIsPinching(true);
+  };
 
-  const animate = () => {
+  /**
+   * Aplica el zoom de forma suave usando requestAnimationFrame
+   * @param touch1 Primer dedo
+   * @param touch2 Segundo dedo
+   */
+  const applySmoothPinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+    // Cancelar animación anterior si existe
+    if (pinchAnimationRef.current) {
+      cancelAnimationFrame(pinchAnimationRef.current);
+    }
+
+    const animate = () => {
+      const currentDistance = getTouchDistance(touch1, touch2);
+      const center = getTouchCenter(touch1, touch2);
+
+      // Calcular factor de zoom basado en la distancia inicial vs actual
+      const zoomFactor = currentDistance / initialTouchDistance;
+
+      // Aplicar factor de zoom a la escala inicial y restringir entre límites
+      const newScale = clamp(initialScale * zoomFactor, 0.5, 4.0);
+      const newZoom = newScale * 100; // Convertir de escala decimal a porcentaje
+
+      // Actualizar último distancia para siguiente frame
+      setLastTouchDistance(currentDistance);
+      setPinchCenter(center);
+
+      // Calcular ajuste de pan para mantener el zoom centrado
+      updatePanForZoom(center, newZoom);
+
+      // Aplicar nuevo zoom
+      setZoom(newZoom);
+
+      // Continuar animación si sigue en modo pinch
+      if (isPinching) {
+        requestRender();
+      }
+    };
+
+    // Ejecutar animación
+    pinchAnimationRef.current = requestAnimationFrame(animate);
+  };
+
+  /**
+   * Actualiza el pan (desplazamiento) para mantener el zoom centrado en el punto especificado
+   * @param zoomCenter Punto central del zoom en coordenadas de pantalla
+   * @param newZoom Nuevo nivel de zoom en porcentaje
+   */
+  const updatePanForZoom = (
+    zoomCenter: { x: number; y: number },
+    newZoom: number
+  ) => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const rect = canvas.getBoundingClientRect();
+
+    // Calcular offsets del viewport
+    const viewportOffsetX = viewportSizeRef.current.width / 2;
+    const viewportOffsetY = viewportSizeRef.current.height / 2;
+
+    // Convertir coordenadas de pantalla a coordenadas del canvas antes del zoom
+    const currentScale = zoom / 100;
+    const newScale = newZoom / 100;
+
+    // Punto en coordenadas del canvas antes del zoom
+    const canvasPointX =
+      (zoomCenter.x - rect.left - panOffset.x) / currentScale - viewportOffsetX;
+    const canvasPointY =
+      (zoomCenter.y - rect.top - panOffset.y) / currentScale - viewportOffsetY;
+
+    // Calcular nueva posición de pan para mantener el punto fijo durante el zoom
+    const newPanX =
+      zoomCenter.x - rect.left - (canvasPointX + viewportOffsetX) * newScale;
+    const newPanY =
+      zoomCenter.y - rect.top - (canvasPointY + viewportOffsetY) * newScale;
+
+    setPanOffset({ x: newPanX, y: newPanY });
+  };
+
+  /**
+   * Maneja el gesto de pinch-to-zoom durante el movimiento
+   * @param touch1 Primer dedo
+   * @param touch2 Segundo dedo
+   */
+  const handlePinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
+    if (!isPinching) return;
+
     const currentDistance = getTouchDistance(touch1, touch2);
     const center = getTouchCenter(touch1, touch2);
 
-    // Calcular factor de zoom basado en la distancia inicial vs actual
-    const zoomFactor = currentDistance / initialTouchDistance;
-
-    // Aplicar factor de zoom a la escala inicial y restringir entre límites
-    const newScale = clamp(initialScale * zoomFactor, 0.5, 4.0);
-    const newZoom = newScale * 100; // Convertir de escala decimal a porcentaje
-
-    // Actualizar último distancia para siguiente frame
-    setLastTouchDistance(currentDistance);
-    setPinchCenter(center);
-
-    // Calcular ajuste de pan para mantener el zoom centrado
-    updatePanForZoom(center, newZoom);
-
-    // Aplicar nuevo zoom
-    setZoom(newZoom);
-
-    // Continuar animación si sigue en modo pinch
-    if (isPinching) {
-      requestRender();
-    }
+    // Aplicar zoom de forma suave
+    applySmoothPinchZoom(touch1, touch2);
   };
 
-  // Ejecutar animación
-  pinchAnimationRef.current = requestAnimationFrame(animate);
-};
+  /**
+   * Finaliza el gesto de pinch-to-zoom
+   */
+  const endPinchZoom = () => {
+    setIsPinching(false);
 
-/**
- * Actualiza el pan (desplazamiento) para mantener el zoom centrado en el punto especificado
- * @param zoomCenter Punto central del zoom en coordenadas de pantalla
- * @param newZoom Nuevo nivel de zoom en porcentaje
- */
-const updatePanForZoom = (zoomCenter: { x: number; y: number }, newZoom: number) => {
-  const canvas = canvasRef.current;
-  if (!canvas) return;
+    // Cancelar cualquier animación pendiente
+    if (pinchAnimationRef.current) {
+      cancelAnimationFrame(pinchAnimationRef.current);
+      pinchAnimationRef.current = undefined;
+    }
 
-  const rect = canvas.getBoundingClientRect();
-
-  // Calcular offsets del viewport
-  const viewportOffsetX = viewportSizeRef.current.width / 2;
-  const viewportOffsetY = viewportSizeRef.current.height / 2;
-
-  // Convertir coordenadas de pantalla a coordenadas del canvas antes del zoom
-  const currentScale = zoom / 100;
-  const newScale = newZoom / 100;
-
-  // Punto en coordenadas del canvas antes del zoom
-  const canvasPointX = (zoomCenter.x - rect.left - panOffset.x) / currentScale - viewportOffsetX;
-  const canvasPointY = (zoomCenter.y - rect.top - panOffset.y) / currentScale - viewportOffsetY;
-
-  // Calcular nueva posición de pan para mantener el punto fijo durante el zoom
-  const newPanX = zoomCenter.x - rect.left - (canvasPointX + viewportOffsetX) * newScale;
-  const newPanY = zoomCenter.y - rect.top - (canvasPointY + viewportOffsetY) * newScale;
-
-  setPanOffset({ x: newPanX, y: newPanY });
-};
-
-/**
- * Maneja el gesto de pinch-to-zoom durante el movimiento
- * @param touch1 Primer dedo
- * @param touch2 Segundo dedo
- */
-const handlePinchZoom = (touch1: React.Touch, touch2: React.Touch) => {
-  if (!isPinching) return;
-
-  const currentDistance = getTouchDistance(touch1, touch2);
-  const center = getTouchCenter(touch1, touch2);
-
-  // Aplicar zoom de forma suave
-  applySmoothPinchZoom(touch1, touch2);
-};
-
-/**
- * Finaliza el gesto de pinch-to-zoom
- */
-const endPinchZoom = () => {
-  setIsPinching(false);
-
-  // Cancelar cualquier animación pendiente
-  if (pinchAnimationRef.current) {
-    cancelAnimationFrame(pinchAnimationRef.current);
-    pinchAnimationRef.current = undefined;
-  }
-
-  // Resetear estados
-  setInitialTouchDistance(0);
-  setLastTouchDistance(0);
-  setInitialScale(1);
-};
+    // Resetear estados
+    setInitialTouchDistance(0);
+    setLastTouchDistance(0);
+    setInitialScale(1);
+  };
 
   // Undo the last action
   const handleUndo = () => {
@@ -3591,7 +3651,7 @@ const endPinchZoom = () => {
             <Button
               variant="ghost"
               size="icon"
-              className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100" 
+              className="h-8 w-8 text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
               onClick={handleUndo}
               disabled={commandIndex < 0}
               title="Deshacer"
@@ -3810,26 +3870,30 @@ const endPinchZoom = () => {
               <div className="text-center px-12 py-20 max-w-2xl mx-4">
                 {/* Sample curved line - inspired by the image */}
                 <div className="ml-14 sm:ml-0 mb-24 flex justify-center">
-                  <svg width="400" height="120" viewBox="0 0 200 80" 
-                  className="opacity-40 sm:w-[80rem] sm:h-[96rem]">
+                  <svg
+                    width="400"
+                    height="120"
+                    viewBox="0 0 200 80"
+                    className="opacity-40 sm:w-[80rem] sm:h-[96rem]"
+                  >
                     <path
                       d="M 20 40 Q 60 10, 100 40 T 180 40"
                       stroke="#1e293b"
                       strokeWidth="2"
                       fill="none"
-                      strokeLinecap="round" 
+                      strokeLinecap="round"
                     />
                   </svg>
                 </div>
 
                 {/* Main title - very minimal */}
-                <div className="text-sm font-light text-gray-800 tracking-wide mb-8" style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}>
-                  
-                </div>
+                <div
+                  className="text-sm font-light text-gray-800 tracking-wide mb-8"
+                  style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+                ></div>
 
                 {/* Subtle hint */}
-                <div className="text-xs text-gray-500 font-light opacity-50 tracking-wider">
-                </div>
+                <div className="text-xs text-gray-500 font-light opacity-50 tracking-wider"></div>
               </div>
             </div>
           )}
@@ -4231,7 +4295,7 @@ const endPinchZoom = () => {
         </div>
 
         {/* History controls - Mobile bottom */}
-        <div className="absolute top-16 right-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:bottom-6 sm:left-6 sm:gap-1 sm:p-2 md:hidden">
+        <div className="absolute top-17 right-4 flex items-center gap-1 rounded-lg border bg-white p-1.5 shadow-lg dark:bg-card sm:top-24 sm:right-6 ">
           <Button
             variant="ghost"
             size="icon"
