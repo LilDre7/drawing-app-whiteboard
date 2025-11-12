@@ -46,15 +46,15 @@ function useTextEditor(params: {
 
   // Desired absolute position over the canvas (baseline -> top conversion)
   // Ensure text editor stays within reasonable bounds
-  const left = Math.max(
-    padding,
-    Math.min(screenPosition.x, viewport.width - 100)
-  );
+  // On mobile, be more restrictive with positioning to prevent off-screen issues
+  const isMobileDevice = typeof window !== "undefined" && window.innerWidth < 768;
+  const minLeft = isMobileDevice ? padding * 2 : padding;
+  const maxLeft = isMobileDevice ? viewport.width - 120 : viewport.width - 100;
+  const minTop = isMobileDevice ? padding * 2 : padding;
+  const maxTop = isMobileDevice ? viewport.height - 100 : viewport.height - 50;
 
-  const top = Math.max(
-    padding,
-    Math.min(screenPosition.y - fontSize - 4, viewport.height - 50)
-  );
+  const left = Math.max(minLeft, Math.min(screenPosition.x, maxLeft));
+  const top = Math.max(minTop, Math.min(screenPosition.y - fontSize - 4, maxTop));
 
   // Hide only if completely outside viewport with generous tolerance
   const tolerance = 150; // Allow 150px tolerance outside viewport
@@ -92,17 +92,19 @@ function useTextEditor(params: {
     color,
     minWidth: "20px",
     minHeight: `${fontSize}px`,
-    maxWidth: "600px",
-    maxHeight: `${Math.max(40, (viewport.height || 0) - 32)}px`,
+    maxWidth: isMobileDevice ? "85vw" : "600px",
+    maxHeight: isMobileDevice
+      ? `${Math.min(200, Math.max(80, window.innerHeight * 0.25))}px`
+      : `${Math.max(40, (viewport.height || 0) - 32)}px`,
     overflow: "auto",
-    lineHeight: 4,
+    lineHeight: isMobileDevice ? 1.4 : 4,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
-    padding: "0",
+    padding: isMobileDevice ? "4px 2px" : "0",
     border: "none",
-    borderRadius: "0",
-    backgroundColor: "transparent",
-    boxShadow: "none",
+    borderRadius: isMobileDevice ? "4px" : "0",
+    backgroundColor: isMobileDevice ? "rgba(255, 255, 255, 0.95)" : "transparent",
+    boxShadow: isMobileDevice ? "0 2px 8px rgba(0,0,0,0.1)" : "none",
     outline: "none",
     resize: "none",
     fontFamily:
@@ -112,6 +114,8 @@ function useTextEditor(params: {
     zIndex: 1000,
     textAlign: "left",
     caretColor: "#3b82f6",
+    transform: isMobileDevice ? "translateZ(0)" : "none", // Hardware acceleration for mobile
+    willChange: isMobileDevice ? "transform" : "auto",
   };
 
   return { ref, style, hidden } as const;
@@ -336,10 +340,11 @@ export default function DrawingCanvas() {
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
   const [showWelcome, setShowWelcome] = useState(true);
   const [color, setColor] = useState("#1e293b");
-  const [strokeWidth, setStrokeWidth] = useState(3); // Trazo más grueso
+  const [strokeWidth, setStrokeWidth] = useState(4)// Trazo más grueso
   const [textSize, setTextSize] = useState(24); // Texto más grande
   const [zoom, setZoom] = useState(100);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
+
 
   // Estados para pinch-to-zoom mejorado
   const [isPinching, setIsPinching] = useState(false);
@@ -349,7 +354,7 @@ export default function DrawingCanvas() {
   const [initialScale, setInitialScale] = useState(1); // Escala inicial cuando comienza el pinch
   const pinchAnimationRef = useRef<number>(undefined); // Referencia para requestAnimationFrame
 
-  const [projectTitle, setProjectTitle] = useState("Untitled Project");
+  const [projectTitle, setProjectTitle] = useState("Give a name");
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
 
@@ -2556,13 +2561,37 @@ export default function DrawingCanvas() {
         const rect = canvas.getBoundingClientRect();
         // Get screen coordinates directly from mouse/touch event
         // These are relative to the canvas container
-        const screenX = clientX - rect.left;
-        const screenY = clientY - rect.top;
+        let screenX = clientX - rect.left;
+        let screenY = clientY - rect.top;
+
+        // On mobile, adjust for visual viewport offset to prevent text from going off-screen
+        if (isTouchEvent && typeof window !== "undefined") {
+          // Account for visual viewport changes (virtual keyboard, zoom, etc.)
+          const visualViewport = (window as any).visualViewport;
+          if (visualViewport) {
+            // Adjust for visual viewport offset
+            screenY += visualViewport.offsetTop - window.scrollY;
+          }
+
+          // Ensure the text editor stays within reasonable bounds on mobile
+          const mobilePadding = 20;
+          const maxEditorHeight = Math.min(200, window.innerHeight * 0.3);
+
+          // Adjust Y position if too close to bottom of screen
+          if (screenY > window.innerHeight - maxEditorHeight - mobilePadding) {
+            screenY = Math.max(mobilePadding, window.innerHeight - maxEditorHeight - mobilePadding);
+          }
+
+          // Adjust X position if outside viewport
+          if (screenX > window.innerWidth - 120) {
+            screenX = Math.max(mobilePadding, window.innerWidth - 120);
+          }
+        }
+
         setScreenTextPosition({ x: screenX, y: screenY });
 
         // Focus the input after state updates
         // Use a longer timeout for mobile devices
-        const isTouchEvent = "touches" in e;
         requestAnimationFrame(() => {
           setTimeout(
             () => {
