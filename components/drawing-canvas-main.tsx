@@ -53,8 +53,16 @@ function useTextEditor(params: {
   const minTop = isMobileDevice ? padding * 2 : padding;
   const maxTop = isMobileDevice ? viewport.height - 100 : viewport.height - 50;
 
-  const left = Math.max(minLeft, Math.min(screenPosition.x, maxLeft));
-  const top = Math.max(minTop, Math.min(screenPosition.y - fontSize - 4, maxTop));
+  // Stabilize positioning for mobile to prevent flickering
+  const rawLeft = screenPosition.x;
+  const rawTop = screenPosition.y - fontSize - 4;
+
+  const left = isMobileDevice
+    ? Math.max(minLeft, Math.min(rawLeft, maxLeft))
+    : Math.max(minLeft, Math.min(screenPosition.x, maxLeft));
+  const top = isMobileDevice
+    ? Math.max(minTop, Math.min(rawTop, maxTop))
+    : Math.max(minTop, Math.min(screenPosition.y - fontSize - 4, maxTop));
 
   // Hide only if completely outside viewport with generous tolerance
   const tolerance = 150; // Allow 150px tolerance outside viewport
@@ -62,6 +70,10 @@ function useTextEditor(params: {
   // Use safe fallback values for SSR
   const getSafeViewportWidth = () => {
     if (typeof window !== "undefined") {
+      // Use fixed viewport for mobile to prevent screen growth
+      if (isMobileDevice) {
+        return Math.min(375, viewport.width || 375);
+      }
       return viewport.width || window.innerWidth || 1000;
     }
     return viewport.width || 1000;
@@ -69,6 +81,10 @@ function useTextEditor(params: {
 
   const getSafeViewportHeight = () => {
     if (typeof window !== "undefined") {
+      // Use fixed viewport for mobile to prevent screen growth
+      if (isMobileDevice) {
+        return Math.min(667, viewport.height || 667);
+      }
       return viewport.height || window.innerHeight || 800;
     }
     return viewport.height || 800;
@@ -79,10 +95,18 @@ function useTextEditor(params: {
 
   const hidden =
     !active ||
-    left + minWidth < -tolerance ||
-    top + minHeight < -tolerance ||
-    left > viewportWidth + tolerance ||
-    top > viewportHeight + tolerance;
+    // More generous bounds for mobile to prevent flickering
+    (isMobileDevice ? (
+      left + minWidth < -200 ||
+      top + minHeight < -200 ||
+      left > viewportWidth + 200 ||
+      top > viewportHeight + 200
+    ) : (
+      left + minWidth < -tolerance ||
+      top + minHeight < -tolerance ||
+      left > viewportWidth + tolerance ||
+      top > viewportHeight + tolerance
+    ));
 
   const style: React.CSSProperties = {
     position: "absolute",
@@ -92,19 +116,19 @@ function useTextEditor(params: {
     color,
     minWidth: "20px",
     minHeight: `${fontSize}px`,
-    maxWidth: isMobileDevice ? "85vw" : "600px",
+    maxWidth: isMobileDevice ? "70vw" : "600px",
     maxHeight: isMobileDevice
-      ? `${Math.min(200, Math.max(80, window.innerHeight * 0.25))}px`
+      ? "120px"
       : `${Math.max(40, (viewport.height || 0) - 32)}px`,
-    overflow: "auto",
+    overflow: "hidden",
     lineHeight: isMobileDevice ? 1.4 : 4,
     whiteSpace: "pre-wrap",
     wordBreak: "break-word",
     padding: isMobileDevice ? "4px 2px" : "0",
     border: "none",
     borderRadius: isMobileDevice ? "4px" : "0",
-    backgroundColor: isMobileDevice ? "rgba(255, 255, 255, 0.95)" : "transparent",
-    boxShadow: isMobileDevice ? "0 2px 8px rgba(0,0,0,0.1)" : "none",
+    backgroundColor: "transparent",
+    boxShadow: "none",
     outline: "none",
     resize: "none",
     fontFamily:
@@ -116,6 +140,17 @@ function useTextEditor(params: {
     caretColor: "#3b82f6",
     transform: isMobileDevice ? "translateZ(0)" : "none", // Hardware acceleration for mobile
     willChange: isMobileDevice ? "transform" : "auto",
+    // Prevent viewport zoom and improve mobile text input
+    touchAction: "manipulation",
+    WebkitUserSelect: "text" as any,
+    userSelect: "text",
+    WebkitTapHighlightColor: "transparent",
+    // Improve rendering stability on mobile
+    WebkitAppearance: "none" as any,
+    WebkitTransform: "translateZ(0)",
+    backfaceVisibility: "hidden" as any,
+    // Ensure text visibility
+    opacity: 1,
   };
 
   return { ref, style, hidden } as const;
@@ -3667,7 +3702,7 @@ export default function DrawingCanvas() {
   };
 
   return (
-    <div className="flex h-screen flex-col mb-4 bg-transparent">
+    <div className="fixed inset-0 flex flex-col mb-4 bg-transparent overflow-hidden">
       <header className="flex h-12 items-center mb-4 border-b dark:bg-slate-950 md:border-0 md:bg-transparent md:px-4 md:pt-4">
         <div className="flex h-full w-full items-center md:gap-3">
           {/* Menu block - Solo en desktop con borde */}
