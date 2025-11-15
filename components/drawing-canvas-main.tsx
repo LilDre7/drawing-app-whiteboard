@@ -47,7 +47,8 @@ function useTextEditor(params: {
   // Desired absolute position over the canvas (baseline -> top conversion)
   // Ensure text editor stays within reasonable bounds
   // On mobile, be more restrictive with positioning to prevent off-screen issues
-  const isMobileDevice = typeof window !== "undefined" && window.innerWidth < 768;
+  const isMobileDevice =
+    typeof window !== "undefined" && window.innerWidth < 768;
   const minLeft = isMobileDevice ? padding * 2 : padding;
   const maxLeft = isMobileDevice ? viewport.width - 120 : viewport.width - 100;
   const minTop = isMobileDevice ? padding * 2 : padding;
@@ -96,17 +97,15 @@ function useTextEditor(params: {
   const hidden =
     !active ||
     // More generous bounds for mobile to prevent flickering
-    (isMobileDevice ? (
-      left + minWidth < -200 ||
-      top + minHeight < -200 ||
-      left > viewportWidth + 200 ||
-      top > viewportHeight + 200
-    ) : (
-      left + minWidth < -tolerance ||
-      top + minHeight < -tolerance ||
-      left > viewportWidth + tolerance ||
-      top > viewportHeight + tolerance
-    ));
+    (isMobileDevice
+      ? left + minWidth < -200 ||
+        top + minHeight < -200 ||
+        left > viewportWidth + 200 ||
+        top > viewportHeight + 200
+      : left + minWidth < -tolerance ||
+        top + minHeight < -tolerance ||
+        left > viewportWidth + tolerance ||
+        top > viewportHeight + tolerance);
 
   const style: React.CSSProperties = {
     position: "absolute",
@@ -375,11 +374,10 @@ export default function DrawingCanvas() {
   const [currentShape, setCurrentShape] = useState<Shape | null>(null);
   const [showWelcome, setShowWelcome] = useState(true);
   const [color, setColor] = useState("#1e293b");
-  const [strokeWidth, setStrokeWidth] = useState(4)// Trazo más grueso
+  const [strokeWidth, setStrokeWidth] = useState(4); // Trazo más grueso
   const [textSize, setTextSize] = useState(24); // Texto más grande
   const [zoom, setZoom] = useState(100);
   const [showShareConfirm, setShowShareConfirm] = useState(false);
-
 
   // Estados para pinch-to-zoom mejorado
   const [isPinching, setIsPinching] = useState(false);
@@ -2614,7 +2612,10 @@ export default function DrawingCanvas() {
 
           // Adjust Y position if too close to bottom of screen
           if (screenY > window.innerHeight - maxEditorHeight - mobilePadding) {
-            screenY = Math.max(mobilePadding, window.innerHeight - maxEditorHeight - mobilePadding);
+            screenY = Math.max(
+              mobilePadding,
+              window.innerHeight - maxEditorHeight - mobilePadding
+            );
           }
 
           // Adjust X position if outside viewport
@@ -4009,7 +4010,7 @@ export default function DrawingCanvas() {
         </div>
 
         {/* Tools bar - Vertical on mobile */}
-        <div className="absolute left-4 top-1/2 flex -translate-y-1/2 flex-col items-center gap-2 overflow-y-auto rounded-xl border bg-white p-2 shadow-lg dark:bg-card sm:left-6 sm:gap-2.5 sm:p-2.5 md:hidden">
+        <div className="absolute left-4 top-[21rem] flex -translate-y-1/2 flex-col items-center gap-2 overflow-y-auto rounded-xl border bg-white p-2 shadow-lg dark:bg-card sm:left-6 sm:gap-2.5 sm:p-2.5 md:hidden">
           <div className="flex flex-col items-center gap-2 sm:gap-2.5">
             <Button
               variant="ghost"
@@ -4142,14 +4143,6 @@ export default function DrawingCanvas() {
               title="Exportar"
             >
               <Download className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-9 w-9 rounded-lg sm:h-10 sm:w-10"
-              title="Más opciones"
-            >
-              <MoreHorizontal className="h-4 w-4 sm:h-5 sm:w-5" />
             </Button>
           </div>
         </div>
