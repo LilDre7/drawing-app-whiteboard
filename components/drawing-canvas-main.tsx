@@ -3802,7 +3802,7 @@ export default function DrawingCanvas() {
             </Button>
 
             {/* Clear - Desktop only */}
-            <Button
+            {/* <Button
               variant="ghost"
               size="icon"
               className="hidden h-8 w-8 text-slate-600 hover:text-red-600 dark:text-slate-400 dark:hover:text-red-400 md:flex"
@@ -3810,7 +3810,7 @@ export default function DrawingCanvas() {
               title="Borrar todo"
             >
               <Trash2 className="h-4 w-4" />
-            </Button>
+            </Button> */}
 
             <div className="mx-1 hidden h-6 w-px bg-slate-200 dark:bg-slate-800 md:block" />
 

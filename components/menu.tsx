@@ -18,6 +18,8 @@ import {
   ArrowUpToLine,
   ArrowBigLeft,
   ArrowRightLeftIcon,
+  ArrowLeftToLineIcon,
+  ArrowRight,
 } from "lucide-react";
 import {
   Sheet,
@@ -70,6 +72,15 @@ export default function MenuComponent() {
                     <p className="font-medium">Mano</p>
                     <p className="text-sm text-muted-foreground">
                       Navega por el canvas arrastrando.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 py-2">
+                  <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Linea</p>
+                    <p className="text-sm text-muted-foreground">
+                      Coloca una linea a largo de la pantalla.
                     </p>
                   </div>
                 </div>
