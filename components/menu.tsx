@@ -13,6 +13,11 @@ import {
   Eraser,
   Trash2,
   Github,
+  LineChart,
+  ListEnd,
+  ArrowUpToLine,
+  ArrowBigLeft,
+  ArrowRightLeftIcon,
 } from "lucide-react";
 import {
   Sheet,
@@ -96,6 +101,15 @@ export default function MenuComponent() {
                   </div>
                 </div>
                 <div className="flex items-start gap-3 py-2">
+                  <ArrowRightLeftIcon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <p className="font-medium">Linea</p>
+                    <p className="text-sm text-muted-foreground">
+                      Coloca una linea recta.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3 py-2">
                   <MessageSquare className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
                   <div>
                     <p className="font-medium">Texto</p>
@@ -173,7 +187,7 @@ export default function MenuComponent() {
                     Aplicación de pizarra para crear wireframes, diagramas y notas visuales.
                   </p>
                   <a
-                    href="https://github.com/tu-usuario/tu-proyecto"
+                    href="https://github.com/LilDre7/drawing-app-whiteboard"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 text-sm text-muted-foreground underline hover:text-foreground"
