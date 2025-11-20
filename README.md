@@ -1,30 +1,51 @@
-# Drawing app whiteboard
+# Just DrawOk – Drawing App 🎨
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+Proyecto: [drawing-app-whiteboard](https://github.com/LilDre7/drawing-app-whiteboard)  
+Deploy en vivo: [just-drawok.vercel.app](https://just-drawok.vercel.app/)
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/alvaroaburto71-gmailcoms-projects/v0-drawing-app-whiteboard)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/vxUbPCHrk8q)
+---
 
-## Overview
+## Descripción  
+Just DrawOk es una aplicación web ligera de pizarra digital donde puedes dibujar libremente. Ideal para bocetar ideas, hacer anotaciones rápidas o simplemente divertirte con trazos y formas en el navegador.
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+---
 
-## Deployment
+## Características principales  
+- Dibujo libre sobre un lienzo HTML5 (canvas)  
+- Control de grosor del pincel (y posiblemente color)  
+- Interfaz limpia, mínima fricción  
+- Sin necesidad de registro ni inicio de sesión  
+- Desplegada en Vercel para acceso inmediato  
 
-Your project is live at:
+---
 
-**[https://vercel.com/alvaroaburto71-gmailcoms-projects/v0-drawing-app-whiteboard](https://vercel.com/alvaroaburto71-gmailcoms-projects/v0-drawing-app-whiteboard)**
+## Tecnologías  
+- TypeScript (la mayor parte del código)  
+- CSS para estilos (o CSS + algún preprocesador si aplica)  
+- Marco de trabajo (según configuración; Next.js u otra)  
+- Despliegue en Vercel  
 
-## Build your app
+---
 
-Continue building your app on:
+## Instalación local  
+Sigue estos pasos para correr la aplicación en tu entorno local:
 
-**[https://v0.app/chat/vxUbPCHrk8q](https://v0.app/chat/vxUbPCHrk8q)**
+```bash
+# Clona el repositorio
+git clone https://github.com/LilDre7/drawing-app-whiteboard.git
 
-## How It Works
+# Entra al directorio
+cd drawing-app-whiteboard
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+# Instala dependencias
+npm install
+# o si usas yarn / pnpm:
+# yarn install
+# pnpm install
+
+# Ejecuta en modo desarrollo
+npm run dev
+# o el comando que tengas definido en package.json
+
+# Abre en tu navegador:
+http://localhost:3000
