@@ -22,7 +22,7 @@ Just DrawOk es una aplicación web ligera de pizarra digital donde puedes dibuja
 ## Tecnologías  
 - TypeScript (la mayor parte del código)  
 - CSS para estilos (o CSS + algún preprocesador si aplica)  
-- Marco de trabajo (según configuración; Next.js u otra)  
+- Marco de trabajo Next.js
 - Despliegue en Vercel  
 
 ---
@@ -38,7 +38,7 @@ git clone https://github.com/LilDre7/drawing-app-whiteboard.git
 cd drawing-app-whiteboard
 
 # Instala dependencias
-npm install
+pnpm install
 # o si usas yarn / pnpm:
 # yarn install
 # pnpm install
